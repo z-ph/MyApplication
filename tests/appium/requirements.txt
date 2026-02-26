@@ -1,0 +1,12 @@
+# Appium Python Client for mobile automation
+Appium-Python-Client>=3.1.0
+
+# Testing framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Assertions
+assertpy>=1.1
+
+# Allure reporting (optional)
+allure-pytest>=2.13.0
