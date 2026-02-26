@@ -228,8 +228,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val lastStep = finalState.steps.lastOrNull()
                 val wasReplySent = lastStep?.action is AgentAction.Reply
 
-                // Only add completion message if it wasn't already a reply
-                if (!wasReplySent) {
+                // Check if this was a pure chat response (no tool calls, only Finish step)
+                // In this case, onReply was already triggered in AgentEngine.processThinking
+                val wasPureChatResponse = finalState.steps.size == 1 &&
+                    finalState.steps.first().action is AgentAction.Finish &&
+                    finalState.isFinished
+
+                // Only add completion message if it wasn't already a reply or pure chat
+                if (!wasReplySent && !wasPureChatResponse) {
                     val completeMessage = when {
                         finalState.isFinished -> {
                             ChatMessage.AiMessage(
