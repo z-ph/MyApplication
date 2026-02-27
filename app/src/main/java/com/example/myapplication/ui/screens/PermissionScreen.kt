@@ -2,6 +2,7 @@ package com.example.myapplication.ui.screens
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -35,6 +36,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.example.myapplication.MyApplication
 import com.example.myapplication.accessibility.AutoService
 import com.example.myapplication.screen.ScreenCapture
+import com.example.myapplication.shell.ShizukuHelper
 import com.example.myapplication.utils.ApiProviders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -72,6 +74,7 @@ fun PermissionScreen(
     var screenCaptureGranted by remember { mutableStateOf(ScreenCapture.isProjectionActive()) }
     var notificationGranted by remember { mutableStateOf(checkNotificationPermission()) }
     var apiKeyConfigured by remember { mutableStateOf(apiClient.isConfigured()) }
+    var shizukuGranted by remember { mutableStateOf(ShizukuHelper.isReady()) }
 
     // Refresh function
     fun refreshStates() {
@@ -79,7 +82,8 @@ fun PermissionScreen(
         screenCaptureGranted = ScreenCapture.isProjectionActive()
         notificationGranted = checkNotificationPermission()
         apiKeyConfigured = apiClient.isConfigured()
-        Log.d(TAG, "States refreshed: accessibility=$accessibilityGranted, screenCapture=$screenCaptureGranted, notification=$notificationGranted, apiKey=$apiKeyConfigured")
+        shizukuGranted = ShizukuHelper.isReady()
+        Log.d(TAG, "States refreshed: accessibility=$accessibilityGranted, screenCapture=$screenCaptureGranted, notification=$notificationGranted, apiKey=$apiKeyConfigured, shizuku=$shizukuGranted")
     }
 
     // Refresh on lifecycle resume
@@ -206,6 +210,32 @@ fun PermissionScreen(
                     modelIdInput = apiClient.modelId
                     selectedProviderId = apiClient.providerId.ifEmpty { "zhipu" }
                     showApiKeyDialog = true
+                }
+            )
+
+            // Shizuku (Optional - for enhanced app operations)
+            PermissionCard(
+                icon = Icons.Default.Terminal,
+                title = "Shizuku (可选)",
+                description = "用于更可靠的应用列表和启动功能。需要先安装 Shizuku APP",
+                granted = shizukuGranted,
+                onGrant = {
+                    // Open Shizuku app if installed, otherwise Play Store
+                    try {
+                        val intent = context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                        if (intent != null) {
+                            context.startActivity(intent)
+                        } else {
+                            // Open Play Store to Shizuku
+                            val playStoreIntent = Intent(Intent.ACTION_VIEW).apply {
+                                data = Uri.parse("market://details?id=moe.shizuku.privileged.api")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(playStoreIntent)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to open Shizuku: ${e.message}")
+                    }
                 }
             )
 
