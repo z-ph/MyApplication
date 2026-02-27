@@ -41,7 +41,19 @@
       "mcp__appium__mobile_launch_app",
       "mcp__appium__mobile_list_elements_on_screennn",
       "mcp__appium__mobile_tap_by_text",
-      "mcp__appium__mobile_type_keys"
+      "mcp__appium__mobile_type_keys",
+      "Bash(claude mcp remove milk-tea)",
+      "Bash(claude mcp remove chrome-devtools)",
+      "Bash(chmod +x ./gradlew)",
+      "Bash(find app/src/main/java -name \"*.kt\" -exec grep -l \"ShizukuHelper\\\\|ShellExecutor\" {} ;)",
+      "Bash(brew install --cask android-commandlinetools)",
+      "Bash(export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools)",
+      "Bash(yes)",
+      "Bash(sdkmanager --sdk_root=$ANDROID_HOME --licenses)",
+      "Bash(sdkmanager --sdk_root=$ANDROID_HOME \"platform-tools\" \"platforms;android-34\" \"build-tools;34.0.0\")",
+      "Bash(export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs"
     ]
   }
 }
