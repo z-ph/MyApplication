@@ -319,7 +319,7 @@ class AgentEngine(context: Context) {
                 return@withContext AgentLoopState.Acting(
                     pendingTools = state.pendingTools.drop(1),
                     executedResults = state.executedResults + ToolResult.success("REPLY:$message"),
-                    context = state.context
+                    context = state.context.copy(lastToolCallId = tool.id)
                 )
             }
             "capture_screen" -> {
@@ -339,13 +339,13 @@ class AgentEngine(context: Context) {
                     return@withContext AgentLoopState.Acting(
                         pendingTools = state.pendingTools.drop(1),
                         executedResults = state.executedResults + ToolResult.success("屏幕截图成功"),
-                        context = state.context
+                        context = state.context.copy(lastToolCallId = tool.id)
                     )
                 } else {
                     return@withContext AgentLoopState.Acting(
                         pendingTools = state.pendingTools.drop(1),
                         executedResults = state.executedResults + ToolResult.failure("屏幕截图失败"),
-                        context = state.context
+                        context = state.context.copy(lastToolCallId = tool.id)
                     )
                 }
             }
@@ -374,15 +374,15 @@ class AgentEngine(context: Context) {
             return@withContext AgentLoopState.Acting(
                 pendingTools = emptyList(),  // Stop executing remaining tools
                 executedResults = state.executedResults + result,
-                context = state.context
+                context = state.context.copy(lastToolCallId = tool.id)
             )
         }
 
         // Continue with next tool
-        AgentLoopState.Acting(
+        return@withContext AgentLoopState.Acting(
             pendingTools = state.pendingTools.drop(1),
             executedResults = state.executedResults + result,
-            context = state.context
+            context = state.context.copy(lastToolCallId = tool.id)
         )
     }
 
@@ -394,8 +394,11 @@ class AgentEngine(context: Context) {
 
         // Add tool result to context with proper tool_call_id
         // The last executed tool should have a valid ID
-        val toolCallId = state.context.lastToolCallId ?: "tool_${System.currentTimeMillis()}"
-        contextManager.addToolResult(toolCallId, state.result.output)
+        val toolCallId = state.context.lastToolCallId
+        if (toolCallId == null) {
+            logger.w("lastToolCallId is null - tool-result pairing is broken")
+        }
+        contextManager.addToolResult(toolCallId ?: "unknown", state.result.output)
 
         // Check if we've exceeded max steps
         val nextStep = state.context.currentStep + 1

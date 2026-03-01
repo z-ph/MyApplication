@@ -240,12 +240,16 @@ class ContextManager {
         }
 
         // Keep the most recent messages, summarize the rest
-        val toSummarize = messages.dropLast(ContextConfig.MAX_MESSAGES / 2)
-        val toKeep = messages.takeLast(ContextConfig.MAX_MESSAGES / 2)
+        val maxToKeep = ContextConfig.MAX_MESSAGES / 2
+        val toKeep = messages.takeLast(maxToKeep)
+        val toSummarize = messages.dropLast(maxToKeep)
 
         if (toSummarize.isEmpty()) {
             return false
         }
+
+        // CRITICAL: Ensure tool message pairing is preserved
+        val pairedToKeep = ensureToolPairing(toKeep)
 
         // Create a summary of old messages
         val summary = buildSummary(toSummarize)
@@ -260,13 +264,13 @@ class ContextManager {
             content = "[历史摘要] $summary"
         ))
 
-        // Add kept messages
-        toKeep.forEach { record ->
+        // Add kept messages (with tool pairing preserved)
+        pairedToKeep.forEach { record ->
             messages.add(record)
             if (record.hasImage) imageCount++
         }
 
-        logger.d("Summarized ${toSummarize.size} old messages")
+        logger.d("Summarized ${toSummarize.size} old messages, kept ${pairedToKeep.size} messages")
         return true
     }
 
@@ -326,4 +330,51 @@ class ContextManager {
      * Get messages for debugging
      */
     fun getMessagesForDebug(): List<ExecutionRecord> = messages.toList()
+
+    /**
+     * Ensure tool message pairing: assistant with tool_calls must be followed by its tool results
+     * If an assistant message has tool_calls but no corresponding tool results in the kept messages,
+     * remove the assistant message to avoid broken pairing
+     */
+    private fun ensureToolPairing(messages: List<ExecutionRecord>): List<ExecutionRecord> {
+        val result = mutableListOf<ExecutionRecord>()
+        var i = 0
+
+        while (i < messages.size) {
+            val record = messages[i]
+            result.add(record)
+
+            // If this is an assistant message with tool_calls
+            if (record.role == "assistant" && record.toolCalls != null && record.toolCalls.isNotEmpty()) {
+                // Check if next messages are tool results for this assistant
+                var j = i + 1
+                var toolCount = 0
+
+                while (j < messages.size && toolCount < record.toolCalls.size) {
+                    val nextRecord = messages[j]
+                    if (nextRecord.role == "tool") {
+                        toolCount++
+                        result.add(nextRecord)
+                        j++
+                    } else {
+                        // Non-tool message found before all tool results
+                        break
+                    }
+                }
+
+                // If we didn't find all tool results, this assistant message is incomplete
+                // Remove it and any tool results we added
+                if (toolCount < record.toolCalls.size) {
+                    repeat(toolCount + 1) { result.removeAt(result.size - 1) }
+                }
+
+                // Move to the next unprocessed message
+                i = j
+            } else {
+                i++
+            }
+        }
+
+        return result
+    }
 }
