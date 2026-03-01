@@ -150,32 +150,34 @@ class ShellExecutor(private val context: Context) {
      */
     suspend fun launchApp(packageName: String): Result<String> = withContext(Dispatchers.IO) {
         try {
-            // Method 1: Try standard Intent launch
-            val intent = pm.getLaunchIntentForPackage(packageName)
+            // Method 1: Try standard Intent launch with known package names
+            val resolvedPackageName = resolvePackageName(packageName)
+
+            val intent = pm.getLaunchIntentForPackage(resolvedPackageName)
             if (intent != null) {
                 intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                val label = getAppLabel(packageName)
-                logger.i("Launched app via Intent: $packageName")
-                return@withContext Result.success("已启动应用: $label ($packageName)")
+                val label = getAppLabel(resolvedPackageName)
+                logger.i("Launched app via Intent: $resolvedPackageName")
+                return@withContext Result.success("已启动应用: $label ($resolvedPackageName)")
             }
 
             // Method 2: Try using monkey command via Shizuku
             if (ShizukuHelper.isReady()) {
                 val result = ShizukuHelper.execute(
-                    "monkey -p $packageName -c android.intent.category.LAUNCHER 1"
+                    "monkey -p $resolvedPackageName -c android.intent.category.LAUNCHER 1"
                 )
                 if (result.isSuccess) {
-                    val label = getAppLabel(packageName)
-                    logger.i("Launched app via monkey: $packageName")
-                    return@withContext Result.success("已启动应用: $label ($packageName)")
+                    val label = getAppLabel(resolvedPackageName)
+                    logger.i("Launched app via monkey: $resolvedPackageName")
+                    return@withContext Result.success("已启动应用: $label ($resolvedPackageName)")
                 }
             }
 
             // Method 3: Try using am start via Shizuku
             if (ShizukuHelper.isReady()) {
                 // Get the main activity
-                val dumpResult = ShizukuHelper.execute("dumpsys package $packageName | grep -A 1 'android.intent.action.MAIN'")
+                val dumpResult = ShizukuHelper.execute("dumpsys package $resolvedPackageName | grep -A 1 'android.intent.action.MAIN'")
                 if (dumpResult.hasOutput) {
                     val activityMatch = Regex("([\\w.]+)/([\\w.]+)").find(dumpResult.output)
                     if (activityMatch != null) {
@@ -183,9 +185,9 @@ class ShellExecutor(private val context: Context) {
                         val activity = activityMatch.groupValues[2]
                         val startResult = ShizukuHelper.execute("am start -n $pkg/$activity")
                         if (startResult.isSuccess) {
-                            val label = getAppLabel(packageName)
-                            logger.i("Launched app via am start: $packageName")
-                            return@withContext Result.success("已启动应用: $label ($packageName)")
+                            val label = getAppLabel(resolvedPackageName)
+                            logger.i("Launched app via am start: $resolvedPackageName")
+                            return@withContext Result.success("已启动应用: $label ($resolvedPackageName)")
                         }
                     }
                 }
@@ -196,6 +198,26 @@ class ShellExecutor(private val context: Context) {
             logger.e("Failed to launch app $packageName: ${e.message}")
             Result.failure(e)
         }
+    }
+
+    /**
+     * Resolve package name from app name or partial package name
+     * Uses a predefined map for common apps as fallback
+     */
+    private suspend fun resolvePackageName(input: String): String {
+        // If it looks like a package name, use it directly
+        if (input.contains(".") && input.count { it == '.' } >= 2) {
+            return input
+        }
+
+        // Try to find via ShellExecutor's app list
+        val found = findAppByName(input)
+        if (found != null) {
+            return found
+        }
+
+        // Return original input as last resort
+        return input
     }
 
     /**
@@ -270,8 +292,21 @@ class ShellExecutor(private val context: Context) {
      * Returns the package name if found
      */
     suspend fun findAppByName(appName: String): String? = withContext(Dispatchers.IO) {
+        // First check common apps mapping
+        val commonApps = COMMON_APPS_MAP
+        commonApps[appName.lowercase()]?.let { return@withContext it }
+
+        // Then try dynamic search
         val result = listAllApps(includeSystem = false, includeNonLaunchable = false)
-        if (result.isFailure) return@withContext null
+        if (result.isFailure) {
+            // Fallback to common apps contains match
+            for ((name, pkg) in commonApps) {
+                if (name.contains(appName, ignoreCase = true) || appName.contains(name, ignoreCase = true)) {
+                    return@withContext pkg
+                }
+            }
+            return@withContext null
+        }
 
         val apps = result.getOrNull() ?: return@withContext null
 
@@ -284,11 +319,31 @@ class ShellExecutor(private val context: Context) {
         // Package name match
         apps.find { it.packageName.contains(appName, ignoreCase = true) }?.packageName?.let { return@withContext it }
 
+        // Final fallback: common apps contains match
+        for ((name, pkg) in commonApps) {
+            if (name.contains(appName, ignoreCase = true) || appName.contains(name, ignoreCase = true)) {
+                return@withContext pkg
+            }
+        }
+
         null
     }
 
     /**
+     * Get common apps mapping for testing
+     */
+    fun getCommonAppsMapForTest(): Map<String, String> = COMMON_APPS_MAP
+
+    /**
+     * Resolve package name for testing
+     */
+    suspend fun resolvePackageNameForTest(input: String): String {
+        return resolvePackageName(input)
+    }
+
+    /**
      * Enable an app (if disabled)
+     * Requires Shizuku
      */
     suspend fun enableApp(packageName: String): Result<String> = withContext(Dispatchers.IO) {
         if (!ShizukuHelper.isReady()) {
@@ -305,6 +360,7 @@ class ShellExecutor(private val context: Context) {
 
     /**
      * Disable an app
+     * Requires Shizuku
      */
     suspend fun disableApp(packageName: String): Result<String> = withContext(Dispatchers.IO) {
         if (!ShizukuHelper.isReady()) {
@@ -317,5 +373,58 @@ class ShellExecutor(private val context: Context) {
         } else {
             Result.failure(Exception("禁用失败: ${result.error}"))
         }
+    }
+
+    companion object {
+        val COMMON_APPS_MAP = mapOf(
+            "微信" to "com.tencent.mm",
+            "weixin" to "com.tencent.mm",
+            "qq" to "com.tencent.mobileqq",
+            "qq音乐" to "com.tencent.qqmusic",
+            "网易云音乐" to "com.netease.cloudmusic",
+            "抖音" to "com.ss.android.ugc.aweme",
+            "douyin" to "com.ss.android.ugc.aweme",
+            "快手" to "com.smile.gifmaker",
+            "淘宝" to "com.taobao.taobao",
+            "taobao" to "com.taobao.taobao",
+            "天猫" to "com.tmall.wireless",
+            "京东" to "com.jingdong.app.mall",
+            "jd" to "com.jingdong.app.mall",
+            "支付宝" to "com.eg.android.AlipayGphone",
+            "alipay" to "com.eg.android.AlipayGphone",
+            "微博" to "com.sina.weibo",
+            "weibo" to "com.sina.weibo",
+            "小红书" to "com.xingin.xhs",
+            "哔哩哔哩" to "tv.danmaku.bili",
+            "bilibili" to "tv.danmaku.bili",
+            "b站" to "tv.danmaku.bili",
+            "美团" to "com.sankuai.meituan",
+            "饿了么" to "me.ele",
+            "高德地图" to "com.autonavi.minimap",
+            "百度地图" to "com.baidu.BaiduMap",
+            "滴滴" to "com.sdu.didi.psnger",
+            "设置" to "com.android.settings",
+            "settings" to "com.android.settings",
+            "相机" to "com.android.camera",
+            "camera" to "com.android.camera",
+            "相册" to "com.android.gallery3d",
+            "gallery" to "com.android.gallery3d",
+            "计算器" to "com.android.calculator2",
+            "calculator" to "com.android.calculator2",
+            "时钟" to "com.android.deskclock",
+            "clock" to "com.android.deskclock",
+            "日历" to "com.android.calendar",
+            "calendar" to "com.android.calendar",
+            "文件管理" to "com.android.filemanager",
+            "files" to "com.android.filemanager",
+            "浏览器" to "com.android.browser",
+            "browser" to "com.android.browser",
+            "电话" to "com.android.dialer",
+            "phone" to "com.android.dialer",
+            "短信" to "com.android.mms",
+            "messages" to "com.android.mms",
+            "联系人" to "com.android.contacts",
+            "contacts" to "com.android.contacts"
+        )
     }
 }

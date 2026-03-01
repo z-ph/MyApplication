@@ -66,7 +66,8 @@ data class LoopContext(
     val currentStep: Int = 0,
     val maxSteps: Int = 20,
     val goal: String = "",
-    val thinkingContent: String? = null
+    val thinkingContent: String? = null,
+    val lastToolCallId: String? = null
 )
 
 /**
@@ -76,7 +77,12 @@ data class ToolCallInfo(
     val id: String = "",
     val name: String,
     val parameters: Map<String, Any>
-)
+) {
+    /**
+     * Generate a valid tool_call_id if not provided
+     */
+    fun getOrCreateId(): String = if (id.isNotEmpty()) id else "call_${System.nanoTime()}"
+}
 
 /**
  * Tool execution result

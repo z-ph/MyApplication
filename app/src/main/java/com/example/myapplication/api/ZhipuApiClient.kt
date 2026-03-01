@@ -478,6 +478,7 @@ class ZhipuApiClient(context: Context) {
                 toolCallsArray.mapNotNull { tc ->
                     try {
                         val tcObj = tc.asJsonObject
+                        val id = tcObj.get("id")?.asString ?: "call_${System.nanoTime()}"
                         val function = tcObj.getAsJsonObject("function")
                         val name = function?.get("name")?.asString ?: return@mapNotNull null
                         val argsJson = function?.get("arguments")?.asString ?: "{}"
@@ -488,7 +489,8 @@ class ZhipuApiClient(context: Context) {
                         com.example.myapplication.agent.ToolCall(
                             name = name,
                             parameters = argsMap,
-                            rawMatch = "$name($argsJson)"
+                            rawMatch = "$name($argsJson)",
+                            id = id
                         )
                     } catch (e: Exception) {
                         logger.e("Failed to parse tool call: ${e.message}")

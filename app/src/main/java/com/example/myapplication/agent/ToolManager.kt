@@ -33,7 +33,8 @@ data class ToolParameter(
 data class ToolCall(
     val name: String,
     val parameters: Map<String, Any>,
-    val rawMatch: String
+    val rawMatch: String,
+    val id: String = ""
 )
 
 /**

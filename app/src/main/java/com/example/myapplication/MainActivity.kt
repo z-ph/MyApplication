@@ -48,6 +48,7 @@ import com.example.myapplication.screen.ScreenCapture
 import com.example.myapplication.ui.chat.ChatScreen
 import com.example.myapplication.ui.screens.ApiConfigScreen
 import com.example.myapplication.ui.screens.ApiTestScreen
+import com.example.myapplication.ui.screens.DebugTestScreen
 import com.example.myapplication.ui.screens.LogScreen
 import com.example.myapplication.ui.screens.MainScreen
 import com.example.myapplication.ui.screens.PermissionScreen
@@ -181,6 +182,9 @@ fun MainApp(
                         modifier = Modifier.padding(paddingValues)
                     )
                 }
+                AppDestinations.DEBUG_TEST -> {
+                    DebugTestScreen()
+                }
                 AppDestinations.PROFILE -> {
                     ProfileScreen(
                         modifier = Modifier.padding(paddingValues)
@@ -201,6 +205,7 @@ enum class AppDestinations(
     PROMPT("Prompt", Icons.Default.EditNote),
     API_TEST("API Test", Icons.Default.BugReport),
     LOGS("Logs", androidx.compose.material.icons.Icons.Default.AccountBox),
+    DEBUG_TEST("Debug", Icons.Default.BugReport),
     PROFILE("Profile", androidx.compose.material.icons.Icons.Default.AccountBox),
 }
 

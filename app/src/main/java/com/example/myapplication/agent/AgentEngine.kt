@@ -392,8 +392,10 @@ class AgentEngine(context: Context) {
     private suspend fun processObserving(state: AgentLoopState.Observing): AgentLoopState {
         logger.d("Observing - Result: ${state.result.output.take(100)}")
 
-        // Add tool result to context
-        contextManager.addToolResult("tool_${System.currentTimeMillis()}", state.result.output)
+        // Add tool result to context with proper tool_call_id
+        // The last executed tool should have a valid ID
+        val toolCallId = state.context.lastToolCallId ?: "tool_${System.currentTimeMillis()}"
+        contextManager.addToolResult(toolCallId, state.result.output)
 
         // Check if we've exceeded max steps
         val nextStep = state.context.currentStep + 1
@@ -429,7 +431,7 @@ class AgentEngine(context: Context) {
                 val calls = gson.fromJson<List<ToolCall>>(json, type) ?: emptyList()
                 calls.map { tc ->
                     ToolCallInfo(
-                        id = "call_${System.nanoTime()}",
+                        id = tc.id.ifEmpty { "call_${System.nanoTime()}" },
                         name = tc.name,
                         parameters = tc.parameters
                     )
@@ -443,7 +445,7 @@ class AgentEngine(context: Context) {
         // Fallback: parse from text (old format)
         return toolManager.parseToolCalls(response).map { tc ->
             ToolCallInfo(
-                id = "call_${System.nanoTime()}",
+                id = tc.id.ifEmpty { "call_${System.nanoTime()}" },
                 name = tc.name,
                 parameters = tc.parameters
             )
