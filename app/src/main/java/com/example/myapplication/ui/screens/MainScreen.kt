@@ -40,6 +40,7 @@ fun MainScreen(
     taskEngine: TaskEngine,
     apiClient: ZhipuApiClient,
     onNavigateToApiConfig: () -> Unit,
+    onNavigateBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -70,6 +71,11 @@ fun MainScreen(
         topBar = {
             TopAppBar(
                 title = { Text("API 设置") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
                 actions = {
                     IconButton(onClick = onNavigateToApiConfig) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")

@@ -23,7 +23,9 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DebugTestScreen() {
+fun DebugTestScreen(
+    onNavigateBack: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val shellExecutor = remember { ShellExecutor(context) }
@@ -45,7 +47,12 @@ fun DebugTestScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("调试测试") }
+                title = { Text("调试测试") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                }
             )
         }
     ) { paddingValues ->

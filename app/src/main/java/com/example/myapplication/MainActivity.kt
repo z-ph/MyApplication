@@ -6,6 +6,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,16 +15,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -106,6 +111,7 @@ fun MainApp(
     onPermissionsGranted: () -> Unit
 ) {
     var currentDestination by remember { mutableStateOf(AppDestinations.CHAT) }
+    var profileSubPage by remember { mutableStateOf(ProfileSubPage.MAIN) }
     val context = LocalContext.current
 
     // Screen capture launcher
@@ -139,7 +145,12 @@ fun MainApp(
                             },
                             label = { Text(destination.label) },
                             selected = currentDestination == destination,
-                            onClick = { currentDestination = destination }
+                            onClick = {
+                                currentDestination = destination
+                                if (destination == AppDestinations.PROFILE) {
+                                    profileSubPage = ProfileSubPage.MAIN
+                                }
+                            }
                         )
                     }
                 }
@@ -149,33 +160,14 @@ fun MainApp(
                 AppDestinations.CHAT -> {
                     ChatScreen(
                         modifier = Modifier.padding(paddingValues),
-                        onOpenSettings = { currentDestination = AppDestinations.SETTINGS },
-                        onOpenPromptEditor = { currentDestination = AppDestinations.PROMPT }
-                    )
-                }
-                AppDestinations.SETTINGS -> {
-                    MainScreen(
-                        taskEngine = taskEngine,
-                        apiClient = apiClient,
-                        onNavigateToApiConfig = { currentDestination = AppDestinations.API_CONFIG },
-                        modifier = Modifier.padding(paddingValues)
-                    )
-                }
-                AppDestinations.API_CONFIG -> {
-                    ApiConfigScreen(
-                        onNavigateBack = { currentDestination = AppDestinations.CHAT },
-                        modifier = Modifier.padding(paddingValues)
-                    )
-                }
-                AppDestinations.PROMPT -> {
-                    SystemPromptScreen(
-                        onNavigateBack = { currentDestination = AppDestinations.CHAT },
-                        modifier = Modifier.padding(paddingValues)
-                    )
-                }
-                AppDestinations.API_TEST -> {
-                    ApiTestScreen(
-                        modifier = Modifier.padding(paddingValues)
+                        onOpenSettings = {
+                            currentDestination = AppDestinations.PROFILE
+                            profileSubPage = ProfileSubPage.SETTINGS
+                        },
+                        onOpenPromptEditor = {
+                            currentDestination = AppDestinations.PROFILE
+                            profileSubPage = ProfileSubPage.PROMPT
+                        }
                     )
                 }
                 AppDestinations.LOGS -> {
@@ -183,13 +175,50 @@ fun MainApp(
                         modifier = Modifier.padding(paddingValues)
                     )
                 }
-                AppDestinations.DEBUG_TEST -> {
-                    DebugTestScreen()
-                }
                 AppDestinations.PROFILE -> {
-                    ProfileScreen(
-                        modifier = Modifier.padding(paddingValues)
-                    )
+                    when (profileSubPage) {
+                        ProfileSubPage.MAIN -> {
+                            ProfileScreen(
+                                modifier = Modifier.padding(paddingValues),
+                                onNavigateToSettings = { profileSubPage = ProfileSubPage.SETTINGS },
+                                onNavigateToApiConfig = { profileSubPage = ProfileSubPage.API_CONFIG },
+                                onNavigateToPrompt = { profileSubPage = ProfileSubPage.PROMPT },
+                                onNavigateToApiTest = { profileSubPage = ProfileSubPage.API_TEST },
+                                onNavigateToDebugTest = { profileSubPage = ProfileSubPage.DEBUG_TEST }
+                            )
+                        }
+                        ProfileSubPage.SETTINGS -> {
+                            MainScreen(
+                                taskEngine = taskEngine,
+                                apiClient = apiClient,
+                                onNavigateToApiConfig = { profileSubPage = ProfileSubPage.API_CONFIG },
+                                onNavigateBack = { profileSubPage = ProfileSubPage.MAIN },
+                                modifier = Modifier.padding(paddingValues)
+                            )
+                        }
+                        ProfileSubPage.API_CONFIG -> {
+                            ApiConfigScreen(
+                                onNavigateBack = { profileSubPage = ProfileSubPage.MAIN },
+                                modifier = Modifier.padding(paddingValues)
+                            )
+                        }
+                        ProfileSubPage.PROMPT -> {
+                            SystemPromptScreen(
+                                onNavigateBack = { profileSubPage = ProfileSubPage.MAIN },
+                                modifier = Modifier.padding(paddingValues)
+                            )
+                        }
+                        ProfileSubPage.API_TEST -> {
+                            ApiTestScreen(
+                                modifier = Modifier.padding(paddingValues)
+                            )
+                        }
+                        ProfileSubPage.DEBUG_TEST -> {
+                            DebugTestScreen(
+                                onNavigateBack = { profileSubPage = ProfileSubPage.MAIN }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -201,17 +230,28 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     CHAT("Chat", Icons.Default.Home),
-    SETTINGS("Settings", Icons.Default.List),
-    API_CONFIG("API", Icons.Default.Cloud),
-    PROMPT("Prompt", Icons.Default.EditNote),
-    API_TEST("API Test", Icons.Default.BugReport),
-    LOGS("Logs", androidx.compose.material.icons.Icons.Default.AccountBox),
-    DEBUG_TEST("Debug", Icons.Default.BugReport),
-    PROFILE("Profile", androidx.compose.material.icons.Icons.Default.AccountBox),
+    LOGS("Logs", Icons.Default.List),
+    PROFILE("我的", Icons.Default.AccountBox),
+}
+
+enum class ProfileSubPage {
+    MAIN,
+    SETTINGS,
+    API_CONFIG,
+    PROMPT,
+    API_TEST,
+    DEBUG_TEST
 }
 
 @Composable
-fun ProfileScreen(modifier: Modifier = Modifier) {
+fun ProfileScreen(
+    modifier: Modifier = Modifier,
+    onNavigateToSettings: () -> Unit = {},
+    onNavigateToApiConfig: () -> Unit = {},
+    onNavigateToPrompt: () -> Unit = {},
+    onNavigateToApiTest: () -> Unit = {},
+    onNavigateToDebugTest: () -> Unit = {}
+) {
     val context = LocalContext.current
     val taskEngine = MyApplication.getTaskEngine()
     val readinessStatus by remember { derivedStateOf { taskEngine.getReadinessStatus() } }
@@ -317,6 +357,105 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        // Menu Card
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "设置",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                MenuItem(
+                    icon = Icons.Default.Settings,
+                    title = "任务设置",
+                    subtitle = "任务控制和API配置",
+                    onClick = onNavigateToSettings
+                )
+
+                MenuItem(
+                    icon = Icons.Default.Cloud,
+                    title = "API 配置管理",
+                    subtitle = "管理多个API提供商",
+                    onClick = onNavigateToApiConfig
+                )
+
+                MenuItem(
+                    icon = Icons.Default.EditNote,
+                    title = "系统提示词",
+                    subtitle = "编辑AI系统提示词",
+                    onClick = onNavigateToPrompt
+                )
+
+                MenuItem(
+                    icon = Icons.Default.BugReport,
+                    title = "API 测试",
+                    subtitle = "测试API连接",
+                    onClick = onNavigateToApiTest
+                )
+
+                MenuItem(
+                    icon = Icons.Default.Build,
+                    title = "调试测试",
+                    subtitle = "Shell和应用测试",
+                    onClick = onNavigateToDebugTest
+                )
+            }
+        }
+
+        // Menu Card
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "设置",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                MenuItem(
+                    icon = Icons.Default.Settings,
+                    title = "任务设置",
+                    subtitle = "任务控制和API配置",
+                    onClick = onNavigateToSettings
+                )
+
+                MenuItem(
+                    icon = Icons.Default.Cloud,
+                    title = "API 配置管理",
+                    subtitle = "管理多个API提供商",
+                    onClick = onNavigateToApiConfig
+                )
+
+                MenuItem(
+                    icon = Icons.Default.EditNote,
+                    title = "系统提示词",
+                    subtitle = "编辑AI系统提示词",
+                    onClick = onNavigateToPrompt
+                )
+
+                MenuItem(
+                    icon = Icons.Default.BugReport,
+                    title = "API 测试",
+                    subtitle = "测试API连接",
+                    onClick = onNavigateToApiTest
+                )
+
+                MenuItem(
+                    icon = Icons.Default.Build,
+                    title = "调试测试",
+                    subtitle = "Shell和应用测试",
+                    onClick = onNavigateToDebugTest
+                )
+            }
+        }
+
+        // About Card
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -346,5 +485,48 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
 fun MainAppPreview() {
     MyApplicationTheme {
         Text("Preview")
+    }
+}
+
+@Composable
+fun MenuItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp)
+        )
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
