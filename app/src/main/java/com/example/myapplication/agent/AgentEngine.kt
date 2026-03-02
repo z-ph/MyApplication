@@ -489,7 +489,10 @@ class AgentEngine(context: Context) {
 
         return AgentLoopState.Thinking(
             context = state.context.copy(
-                currentStep = nextStep
+                currentStep = nextStep,
+                // Clear tool execution tracking for the new step
+                executedToolCallIds = emptyList(),
+                executedToolResults = emptyList()
             )
         )
     }
