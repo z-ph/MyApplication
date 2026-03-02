@@ -56,6 +56,9 @@ object AppConfig {
 
         /** Overall task timeout in milliseconds */
         const val TASK_TIMEOUT_MS = 60000L
+
+        /** Single step timeout in milliseconds (2 minutes per step) */
+        const val STEP_TIMEOUT_MS = 120000L
     }
 
     /**

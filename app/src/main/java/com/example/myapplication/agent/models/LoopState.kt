@@ -67,7 +67,8 @@ data class LoopContext(
     val maxSteps: Int = 20,
     val goal: String = "",
     val thinkingContent: String? = null,
-    val lastToolCallId: String? = null
+    val executedToolCallIds: List<String> = emptyList(),  // All executed tool IDs in this step
+    val executedToolResults: List<ToolResult> = emptyList()  // Results for each executed tool
 )
 
 /**

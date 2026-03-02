@@ -5,6 +5,7 @@ import com.example.myapplication.accessibility.AutoService
 import com.example.myapplication.agent.models.*
 import com.example.myapplication.api.ZhipuApiClient
 import com.example.myapplication.config.AppConfig.Agent as AgentConfig
+import com.example.myapplication.config.AppConfig.Timeouts
 import com.example.myapplication.screen.Base64Encoder
 import com.example.myapplication.screen.ImageCompressor
 import com.example.myapplication.screen.ScreenCapture
@@ -16,6 +17,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
 
 /**
  * Agent Engine - AI controls the entire flow using state machine pattern
@@ -74,8 +77,8 @@ class AgentEngine(context: Context) {
     // Current loop state (internal)
     private var loopState: AgentLoopState = AgentLoopState.Idle
 
-    // Current screen image
-    private var currentScreenBase64: String? = null
+    // Current screen image (thread-safe for concurrent access)
+    private val currentScreenBase64 = AtomicReference<String?>(null)
 
     // Callbacks
     var onStepComplete: ((AgentStep) -> Unit)? = null
@@ -154,7 +157,7 @@ class AgentEngine(context: Context) {
         // 更新 UI 状态
         _state.value = AgentState(isRunning = false)
         // 清空屏幕缓存
-        currentScreenBase64 = null
+        currentScreenBase64.set(null)
     }
 
     /**
@@ -212,8 +215,23 @@ class AgentEngine(context: Context) {
      * Process Thinking state - call AI and get tool calls
      */
     private suspend fun processThinking(state: AgentLoopState.Thinking): AgentLoopState = withContext(Dispatchers.IO) {
-        // Check if cancelled
-        ensureActive()
+        // Apply step timeout to prevent infinite loops
+        try {
+            withTimeout(Timeouts.STEP_TIMEOUT_MS) {
+                processThinkingInternal(state)
+            }
+        } catch (e: TimeoutCancellationException) {
+            logger.e("Step timeout exceeded after ${Timeouts.STEP_TIMEOUT_MS}ms")
+            AgentLoopState.Failed("步骤超时(${Timeouts.STEP_TIMEOUT_MS / 1000}秒)", recoverable = true)
+        }
+    }
+
+    /**
+     * Internal thinking processing logic
+     */
+    private suspend fun processThinkingInternal(state: AgentLoopState.Thinking): AgentLoopState {
+        // Check if cancelled - use coroutineContext.ensureActive() instead
+        coroutineContext.ensureActive()
 
         logger.d("Thinking - Step ${state.context.currentStep}/${state.context.maxSteps}")
 
@@ -225,20 +243,20 @@ class AgentEngine(context: Context) {
         val messages = contextManager.buildMessages(
             systemPrompt = systemPrompt,
             goal = state.context.goal,
-            currentScreenBase64 = currentScreenBase64
+            currentScreenBase64 = currentScreenBase64.get()
         )
 
         // Check if cancelled before API call
-        ensureActive()
+        coroutineContext.ensureActive()
 
         // Call AI
         val response = callAI(messages)
         if (response == null) {
-            return@withContext AgentLoopState.Failed("AI调用失败", recoverable = true)
+            return AgentLoopState.Failed("AI调用失败", recoverable = true)
         }
 
         // Check if cancelled after API call
-        ensureActive()
+        coroutineContext.ensureActive()
 
         logger.d("AI response: ${response.take(300)}...")
 
@@ -259,7 +277,7 @@ class AgentEngine(context: Context) {
             // No tool call - treat as pure chat response, end the task
             onReply?.invoke(response)
 
-            return@withContext AgentLoopState.Completed(response)
+            return AgentLoopState.Completed(response)
         }
 
         // 检查是否只调用了 reply/finish 工具 - 如果是，直接结束任务
@@ -272,11 +290,11 @@ class AgentEngine(context: Context) {
                     onReply?.invoke(message)
                 } else if (tc.name == "finish") {
                     val summary = tc.parameters["summary"] as? String ?: "任务完成"
-                    return@withContext AgentLoopState.Completed(summary)
+                    return AgentLoopState.Completed(summary)
                 }
             }
             // 如果只有 reply 没有 finish，也结束任务
-            return@withContext AgentLoopState.Completed("已回复用户")
+            return AgentLoopState.Completed("已回复用户")
         }
 
         // Notify tool calls
@@ -289,7 +307,7 @@ class AgentEngine(context: Context) {
         }
 
         // Transition to Acting state with tool queue
-        AgentLoopState.Acting(
+        return AgentLoopState.Acting(
             pendingTools = toolCalls,
             executedResults = emptyList(),
             context = state.context.copy(thinkingContent = thinking)
@@ -339,16 +357,20 @@ class AgentEngine(context: Context) {
                 onStepComplete?.invoke(step)
 
                 // Continue with remaining tools
+                val toolResult = ToolResult.success("REPLY:$message")
                 return@withContext AgentLoopState.Acting(
                     pendingTools = state.pendingTools.drop(1),
-                    executedResults = state.executedResults + ToolResult.success("REPLY:$message"),
-                    context = state.context.copy(lastToolCallId = tool.id)
+                    executedResults = state.executedResults + toolResult,
+                    context = state.context.copy(
+                        executedToolCallIds = state.context.executedToolCallIds + tool.getOrCreateId(),
+                        executedToolResults = state.context.executedToolResults + toolResult
+                    )
                 )
             }
             "capture_screen" -> {
                 val result = captureScreenInternal()
                 if (result != null) {
-                    currentScreenBase64 = result
+                    currentScreenBase64.set(result)
 
                     val step = AgentStep(
                         thinking = state.context.thinkingContent,
@@ -359,16 +381,24 @@ class AgentEngine(context: Context) {
                     _state.value = _state.value.copy(steps = _state.value.steps + step)
                     onStepComplete?.invoke(step)
 
+                    val toolResult = ToolResult.success("屏幕截图成功")
                     return@withContext AgentLoopState.Acting(
                         pendingTools = state.pendingTools.drop(1),
-                        executedResults = state.executedResults + ToolResult.success("屏幕截图成功"),
-                        context = state.context.copy(lastToolCallId = tool.id)
+                        executedResults = state.executedResults + toolResult,
+                        context = state.context.copy(
+                            executedToolCallIds = state.context.executedToolCallIds + tool.getOrCreateId(),
+                            executedToolResults = state.context.executedToolResults + toolResult
+                        )
                     )
                 } else {
+                    val toolResult = ToolResult.failure("屏幕截图失败")
                     return@withContext AgentLoopState.Acting(
                         pendingTools = state.pendingTools.drop(1),
-                        executedResults = state.executedResults + ToolResult.failure("屏幕截图失败"),
-                        context = state.context.copy(lastToolCallId = tool.id)
+                        executedResults = state.executedResults + toolResult,
+                        context = state.context.copy(
+                            executedToolCallIds = state.context.executedToolCallIds + tool.getOrCreateId(),
+                            executedToolResults = state.context.executedToolResults + toolResult
+                        )
                     )
                 }
             }
@@ -389,7 +419,7 @@ class AgentEngine(context: Context) {
         onStepComplete?.invoke(step)
 
         // Clear screen cache after action (screen may have changed)
-        currentScreenBase64 = null
+        currentScreenBase64.set(null)
 
         // Continue with remaining tools or fail on error
         if (!result.success) {
@@ -397,7 +427,10 @@ class AgentEngine(context: Context) {
             return@withContext AgentLoopState.Acting(
                 pendingTools = emptyList(),  // Stop executing remaining tools
                 executedResults = state.executedResults + result,
-                context = state.context.copy(lastToolCallId = tool.id)
+                context = state.context.copy(
+                    executedToolCallIds = state.context.executedToolCallIds + tool.getOrCreateId(),
+                    executedToolResults = state.context.executedToolResults + result
+                )
             )
         }
 
@@ -405,7 +438,10 @@ class AgentEngine(context: Context) {
         return@withContext AgentLoopState.Acting(
             pendingTools = state.pendingTools.drop(1),
             executedResults = state.executedResults + result,
-            context = state.context.copy(lastToolCallId = tool.id)
+            context = state.context.copy(
+                executedToolCallIds = state.context.executedToolCallIds + tool.getOrCreateId(),
+                executedToolResults = state.context.executedToolResults + result
+            )
         )
     }
 
@@ -415,13 +451,26 @@ class AgentEngine(context: Context) {
     private suspend fun processObserving(state: AgentLoopState.Observing): AgentLoopState {
         logger.d("Observing - Result: ${state.result.output.take(100)}")
 
-        // Add tool result to context with proper tool_call_id
-        // The last executed tool should have a valid ID
-        val toolCallId = state.context.lastToolCallId
-        if (toolCallId == null) {
-            logger.w("lastToolCallId is null - tool-result pairing is broken")
+        // Add tool results to context with proper tool_call_id pairing
+        // Each executed tool gets its own result using stored executedToolResults
+        val toolCallIds = state.context.executedToolCallIds
+        val toolResults = state.context.executedToolResults
+
+        if (toolCallIds.isEmpty()) {
+            logger.w("executedToolCallIds is empty - no tool results to add")
+        } else {
+            // For each executed tool, add its corresponding result
+            toolCallIds.forEachIndexed { index, toolCallId ->
+                // Use individual result if available, otherwise use combined result
+                val resultContent = if (index < toolResults.size) {
+                    toolResults[index].output
+                } else {
+                    // Fallback to combined result if results list is shorter
+                    state.result.output
+                }
+                contextManager.addToolResult(toolCallId.ifEmpty { "unknown" }, resultContent)
+            }
         }
-        contextManager.addToolResult(toolCallId ?: "unknown", state.result.output)
 
         // Check if we've exceeded max steps
         val nextStep = state.context.currentStep + 1
@@ -449,10 +498,45 @@ class AgentEngine(context: Context) {
      * Parse tool calls from AI response
      */
     private fun parseToolCalls(response: String): List<ToolCallInfo> {
-        // Check for new format (function calling)
-        if (response.startsWith("__TOOL_CALLS__")) {
+        // Check for new format (function calling) with stricter detection
+        // Look for __TOOL_CALLS__ marker that must be followed by valid JSON array
+        val markerPattern = Regex("""^__TOOL_CALLS__\s*\[""", RegexOption.MULTILINE)
+        val markerMatch = markerPattern.find(response)
+
+        if (markerMatch != null) {
             return try {
-                val json = response.removePrefix("__TOOL_CALLS__")
+                // Find the start of JSON array
+                val jsonStartIndex = response.indexOf("__TOOL_CALLS__") + "__TOOL_CALLS__".length
+                val jsonContent = response.substring(jsonStartIndex).trim()
+
+                // Validate JSON structure
+                if (!jsonContent.startsWith("[")) {
+                    logger.w("Invalid tool calls format: missing opening bracket")
+                    return emptyList()
+                }
+
+                // Find matching closing bracket
+                var bracketCount = 0
+                var jsonEndIndex = 0
+                for ((index, char) in jsonContent.withIndex()) {
+                    when (char) {
+                        '[' -> bracketCount++
+                        ']' -> {
+                            bracketCount--
+                            if (bracketCount == 0) {
+                                jsonEndIndex = index + 1
+                                break
+                            }
+                        }
+                    }
+                }
+
+                if (bracketCount != 0) {
+                    logger.w("Invalid tool calls format: unbalanced brackets")
+                    return emptyList()
+                }
+
+                val json = jsonContent.substring(0, jsonEndIndex)
                 val type = object : TypeToken<List<ToolCall>>() {}.type
                 val calls = gson.fromJson<List<ToolCall>>(json, type) ?: emptyList()
                 calls.map { tc ->
@@ -639,10 +723,17 @@ class AgentEngine(context: Context) {
 }
 
 /**
- * Agent action types (unchanged for compatibility)
+ * Agent action types - including UI element based actions (primary) and gesture based actions (fallback)
  */
 sealed class AgentAction {
-    // 手势操作
+    // 基于控件树的操作（推荐）
+    data class ClickByText(val text: String, val exact: Boolean) : AgentAction()
+    data class LongClickByText(val text: String, val exact: Boolean, val duration: Long = 500) : AgentAction()
+    data class FindNodesByText(val text: String, val exact: Boolean) : AgentAction()
+    data class ScrollToText(val text: String, val maxSwipes: Int, val direction: String) : AgentAction()
+    object GetUiHierarchy : AgentAction()
+
+    // 手势操作（后备方案）
     data class Click(val x: Float, val y: Float) : AgentAction()
     data class LongClick(val x: Float, val y: Float, val duration: Long = 500) : AgentAction()
     data class DoubleClick(val x: Float, val y: Float) : AgentAction()
@@ -678,6 +769,14 @@ sealed class AgentAction {
     data class Unknown(val name: String) : AgentAction()
 
     fun toDescription(): String = when (this) {
+        // 基于控件树的操作
+        is ClickByText -> "ClickByText(\"$text\", exact=$exact)"
+        is LongClickByText -> "LongClickByText(\"$text\", exact=$exact, ${duration}ms)"
+        is FindNodesByText -> "FindNodesByText(\"$text\", exact=$exact)"
+        is ScrollToText -> "ScrollToText(\"$text\", maxSwipes=$maxSwipes, dir=$direction)"
+        is GetUiHierarchy -> "GetUiHierarchy()"
+
+        // 手势操作
         is Click -> "Click(${x.toInt()}, ${y.toInt()})"
         is LongClick -> "LongClick(${x.toInt()}, ${y.toInt()}, ${duration}ms)"
         is DoubleClick -> "DoubleClick(${x.toInt()}, ${y.toInt()})"

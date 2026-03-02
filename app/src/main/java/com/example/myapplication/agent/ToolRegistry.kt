@@ -21,8 +21,9 @@ import kotlinx.coroutines.withContext
  * Tool category for organization
  */
 enum class ToolCategory {
-    OBSERVATION,    // capture_screen, list_apps
-    GESTURE,        // click, swipe, drag, type
+    OBSERVATION,    // capture_screen, list_apps, get_ui_hierarchy
+    UI_ELEMENT,     // click_by_text, find_nodes_by_text (基于控件树的操作)
+    GESTURE,        // click, swipe, drag, type (基于坐标的操作，后备方案)
     NAVIGATION,     // back, home, recents
     SYSTEM,         // open_notifications, lock_screen
     CLIPBOARD,      // copy, paste
@@ -100,10 +101,17 @@ class ToolRegistry private constructor(private val context: Context) {
      */
     private fun registerAllTools() {
         // === OBSERVATION TOOLS ===
+        register(createGetUiHierarchyTool())
         register(createCaptureScreenTool())
         register(createListAppsTool())
 
-        // === GESTURE TOOLS ===
+        // === UI ELEMENT TOOLS (Primary - 基于控件树) ===
+        register(createFindNodesByTextTool())
+        register(createClickByTextTool())
+        register(createLongClickByTextTool())
+        register(createScrollToTextTool())
+
+        // === GESTURE TOOLS (Fallback - 基于坐标) ===
         register(createClickTool())
         register(createLongClickTool())
         register(createDoubleClickTool())
@@ -236,16 +244,20 @@ class ToolRegistry private constructor(private val context: Context) {
         parameters = emptyList(),
         execute = { _, ctx ->
             withContext(Dispatchers.IO) {
+                var bitmap: android.graphics.Bitmap? = null
+                var compressed: android.graphics.Bitmap? = null
                 try {
-                    val bitmap = ctx.screenCapture.capture()
+                    bitmap = ctx.screenCapture.capture()
                         ?: return@withContext ToolResult.failure("屏幕捕获失败")
-                    val compressed = ctx.imageCompressor.compressSmart(bitmap)
+                    compressed = ctx.imageCompressor.compressSmart(bitmap)
                     val base64 = ctx.base64Encoder.encode(compressed, compress = false)
-                    bitmap.recycle()
-                    compressed.recycle()
                     ToolResult.success("屏幕截图成功:$base64")
                 } catch (e: Exception) {
                     ToolResult.failure("屏幕截图失败: ${e.message}")
+                } finally {
+                    // Ensure Bitmaps are recycled even on exception
+                    compressed?.recycle()
+                    bitmap?.recycle()
                 }
             }
         }
@@ -300,8 +312,14 @@ class ToolRegistry private constructor(private val context: Context) {
             val service = AutoService.getInstance()
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
-            val x = (params["x"] as? Number)?.toFloat() ?: 0f
-            val y = (params["y"] as? Number)?.toFloat() ?: 0f
+            // Parameter validation - fail if required params are missing
+            val x = (params["x"] as? Number)?.toFloat()
+            val y = (params["y"] as? Number)?.toFloat()
+
+            if (x == null || y == null) {
+                return@Tool ToolResult.failure("缺少必需参数: x=${params["x"]}, y=${params["y"]}")
+            }
+
             // 确保坐标在有效范围内
             val normalizedX = x.coerceIn(0f, Coords.NORMALIZED_WIDTH.toFloat())
             val normalizedY = y.coerceIn(0f, Coords.NORMALIZED_HEIGHT.toFloat())
@@ -328,8 +346,14 @@ class ToolRegistry private constructor(private val context: Context) {
             val service = AutoService.getInstance()
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
-            val x = (params["x"] as? Number)?.toFloat() ?: 0f
-            val y = (params["y"] as? Number)?.toFloat() ?: 0f
+            // Parameter validation - fail if required params are missing
+            val x = (params["x"] as? Number)?.toFloat()
+            val y = (params["y"] as? Number)?.toFloat()
+
+            if (x == null || y == null) {
+                return@Tool ToolResult.failure("缺少必需参数: x=${params["x"]}, y=${params["y"]}")
+            }
+
             val duration = (params["duration"] as? Number)?.toLong() ?: Delays.LONG_DELAY_MS
             val normalizedX = x.coerceIn(0f, Coords.NORMALIZED_WIDTH.toFloat())
             val normalizedY = y.coerceIn(0f, Coords.NORMALIZED_HEIGHT.toFloat())
@@ -353,8 +377,14 @@ class ToolRegistry private constructor(private val context: Context) {
             val service = AutoService.getInstance()
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
-            val x = (params["x"] as? Number)?.toFloat() ?: 0f
-            val y = (params["y"] as? Number)?.toFloat() ?: 0f
+            // Parameter validation - fail if required params are missing
+            val x = (params["x"] as? Number)?.toFloat()
+            val y = (params["y"] as? Number)?.toFloat()
+
+            if (x == null || y == null) {
+                return@Tool ToolResult.failure("缺少必需参数: x=${params["x"]}, y=${params["y"]}")
+            }
+
             val normalizedX = x.coerceIn(0f, Coords.NORMALIZED_WIDTH.toFloat())
             val normalizedY = y.coerceIn(0f, Coords.NORMALIZED_HEIGHT.toFloat())
             val realX = normalizedX * ctx.screenWidth / Coords.NORMALIZED_WIDTH.toFloat()
@@ -409,10 +439,15 @@ class ToolRegistry private constructor(private val context: Context) {
             val service = AutoService.getInstance()
                 ?: return@Tool ToolResult.failure("无障碍服务未启用")
 
-            val startX = (params["start_x"] as? Number)?.toFloat() ?: 0f
-            val startY = (params["start_y"] as? Number)?.toFloat() ?: 0f
-            val endX = (params["end_x"] as? Number)?.toFloat() ?: 0f
-            val endY = (params["end_y"] as? Number)?.toFloat() ?: 0f
+            // Parameter validation - fail if required params are missing
+            val startX = (params["start_x"] as? Number)?.toFloat()
+            val startY = (params["start_y"] as? Number)?.toFloat()
+            val endX = (params["end_x"] as? Number)?.toFloat()
+            val endY = (params["end_y"] as? Number)?.toFloat()
+
+            if (startX == null || startY == null || endX == null || endY == null) {
+                return@Tool ToolResult.failure("缺少必需参数: start_x=${params["start_x"]}, start_y=${params["start_y"]}, end_x=${params["end_x"]}, end_y=${params["end_y"]}")
+            }
 
             val normalizedStartX = startX.coerceIn(0f, Coords.NORMALIZED_WIDTH.toFloat())
             val normalizedStartY = startY.coerceIn(0f, Coords.NORMALIZED_HEIGHT.toFloat())
@@ -604,10 +639,20 @@ class ToolRegistry private constructor(private val context: Context) {
         parameters = listOf(
             ToolParam("ms", "integer", "等待时间(毫秒)")
         ),
-        execute = { params, _ ->
+        execute = { params, ctx ->
             val ms = (params["ms"] as? Number)?.toLong() ?: 1000L
-            kotlinx.coroutines.delay(ms)
-            ToolResult.success("等待 ${ms}ms")
+            try {
+                // 使用 withTimeout 包装 delay，支持取消操作
+                kotlinx.coroutines.withTimeout(ms) {
+                    kotlinx.coroutines.delay(ms)
+                }
+                ToolResult.success("等待 ${ms}ms")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                ToolResult.failure("等待被取消")
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                // 超时完成（正常情况下不会发生）
+                ToolResult.success("等待完成")
+            }
         }
     )
 
@@ -725,6 +770,289 @@ class ToolRegistry private constructor(private val context: Context) {
         execute = { params, _ ->
             val message = params["message"] as? String ?: ""
             ToolResult.success("REPLY:$message")
+        }
+    )
+
+    // ==================== UI ELEMENT TOOLS (基于控件树) ====================
+
+    private fun createGetUiHierarchyTool() = Tool(
+        name = "get_ui_hierarchy",
+        description = "获取当前屏幕的UI控件树信息。返回所有可见控件的文本、描述、坐标位置、可点击状态等。这是首选的屏幕分析方法。",
+        category = ToolCategory.OBSERVATION,
+        parameters = emptyList(),
+        execute = { _, _ ->
+            val service = AutoService.getInstance()
+                ?: return@Tool ToolResult.failure("无障碍服务未启用")
+
+            try {
+                val root = service.getAccessibilityNodeInfo()
+                    ?: return@Tool ToolResult.failure("无法获取控件树根节点")
+
+                val sb = StringBuilder()
+                sb.appendLine("=== UI控件树 ===")
+                sb.appendLine("")
+
+                // 收集所有可交互元素
+                val clickableElements = mutableListOf<String>()
+                val editableElements = mutableListOf<String>()
+                val scrollableElements = mutableListOf<String>()
+                val allElements = mutableListOf<Pair<String, String>>()
+
+                traverseNode(root, 0, service, sb, clickableElements, editableElements, scrollableElements, allElements)
+
+                // 添加汇总信息
+                sb.appendLine("")
+                sb.appendLine("=== 可交互元素汇总 ===")
+                if (clickableElements.isNotEmpty()) {
+                    sb.appendLine("可点击元素 (${clickableElements.size}个):")
+                    clickableElements.forEach { sb.appendLine("  $it") }
+                }
+                if (editableElements.isNotEmpty()) {
+                    sb.appendLine("可输入元素 (${editableElements.size}个):")
+                    editableElements.forEach { sb.appendLine("  $it") }
+                }
+                if (scrollableElements.isNotEmpty()) {
+                    sb.appendLine("可滚动元素 (${scrollableElements.size}个):")
+                    scrollableElements.forEach { sb.appendLine("  $it") }
+                }
+
+                ToolResult.success(sb.toString())
+            } catch (e: Exception) {
+                ToolResult.failure("获取控件树失败: ${e.message}")
+            }
+        }
+    )
+
+    private fun traverseNode(
+        node: android.view.accessibility.AccessibilityNodeInfo,
+        depth: Int,
+        service: AutoService,
+        sb: StringBuilder,
+        clickableElements: MutableList<String>,
+        editableElements: MutableList<String>,
+        scrollableElements: MutableList<String>,
+        allElements: MutableList<Pair<String, String>>
+    ) {
+        if (depth > 10) return // 限制深度
+
+        val indent = "  ".repeat(depth)
+        val text = node.text?.toString()
+        val desc = node.contentDescription?.toString()
+        val className = node.className?.toString()?.split(".")?.last() ?: "View"
+        val bounds = android.graphics.Rect()
+        node.getBoundsInScreen(bounds)
+        val centerX = bounds.centerX()
+        val centerY = bounds.centerY()
+
+        // 构建元素描述
+        val attrs = mutableListOf<String>()
+        if (text != null && text.isNotEmpty()) attrs.add("text=\"$text\"")
+        if (desc != null && desc.isNotEmpty()) attrs.add("desc=\"$desc\"")
+        attrs.add("pos=($centerX,$centerY)")
+        if (node.isClickable) attrs.add("clickable")
+        if (node.isLongClickable) attrs.add("longClickable")
+        if (node.isEditable) attrs.add("editable")
+        if (node.isScrollable) attrs.add("scrollable")
+        if (node.isCheckable) attrs.add("checkable")
+        if (node.isChecked) attrs.add("checked")
+        if (node.isEnabled) attrs.add("enabled")
+        if (node.isVisibleToUser) attrs.add("visible")
+
+        val elementDesc = "$className [${attrs.joinToString(", ")}]"
+        sb.appendLine("$indent$elementDesc")
+
+        // 记录到分类列表
+        val shortDesc = buildString {
+            if (text != null && text.isNotEmpty()) append("\"$text\"")
+            else if (desc != null && desc.isNotEmpty()) append("desc:\"$desc\"")
+            else append("$className")
+            append(" at ($centerX,$centerY)")
+        }
+
+        if (node.isClickable && (text != null || desc != null)) {
+            clickableElements.add(shortDesc)
+        }
+        if (node.isEditable) {
+            editableElements.add(shortDesc)
+        }
+        if (node.isScrollable) {
+            scrollableElements.add(shortDesc)
+        }
+
+        // 记录所有可见元素
+        if (node.isVisibleToUser) {
+            val elementText = text ?: desc ?: className
+            allElements.add(elementText to "($centerX,$centerY)")
+        }
+
+        // 遍历子节点
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let {
+                traverseNode(it, depth + 1, service, sb, clickableElements, editableElements, scrollableElements, allElements)
+            }
+        }
+    }
+
+    private fun createFindNodesByTextTool() = Tool(
+        name = "find_nodes_by_text",
+        description = "根据文本查找屏幕上的控件，返回匹配的控件信息和坐标位置。支持模糊匹配。",
+        category = ToolCategory.UI_ELEMENT,
+        parameters = listOf(
+            ToolParam("text", "string", "要查找的文本内容"),
+            ToolParam("exact", "boolean", "是否精确匹配，默认false（模糊匹配）", required = false)
+        ),
+        execute = { params, _ ->
+            val service = AutoService.getInstance()
+                ?: return@Tool ToolResult.failure("无障碍服务未启用")
+
+            val text = params["text"] as? String
+                ?: return@Tool ToolResult.failure("缺少必需参数: text")
+            val exact = params["exact"] as? Boolean ?: false
+
+            val nodes = service.findNodesByText(text, exact)
+            if (nodes.isEmpty()) {
+                return@Tool ToolResult.failure("未找到包含\"$text\"的控件")
+            }
+
+            val sb = StringBuilder()
+            sb.appendLine("找到 ${nodes.size} 个匹配控件:")
+            nodes.forEachIndexed { index, node ->
+                val bounds = android.graphics.Rect()
+                node.getBoundsInScreen(bounds)
+                val nodeText = node.text?.toString() ?: ""
+                val nodeDesc = node.contentDescription?.toString() ?: ""
+                sb.appendLine("${index + 1}. 文本=\"$nodeText\", 描述=\"$nodeDesc\", 坐标=(${bounds.centerX()},${bounds.centerY()}), 可点击=${node.isClickable}")
+            }
+            ToolResult.success(sb.toString())
+        }
+    )
+
+    private fun createClickByTextTool() = Tool(
+        name = "click_by_text",
+        description = "根据文本点击屏幕上的控件。优先使用此工具进行点击操作，比坐标点击更稳定可靠。",
+        category = ToolCategory.UI_ELEMENT,
+        parameters = listOf(
+            ToolParam("text", "string", "要点击的控件文本"),
+            ToolParam("exact", "boolean", "是否精确匹配，默认false", required = false)
+        ),
+        execute = { params, _ ->
+            val service = AutoService.getInstance()
+                ?: return@Tool ToolResult.failure("无障碍服务未启用")
+
+            val text = params["text"] as? String
+                ?: return@Tool ToolResult.failure("缺少必需参数: text")
+            val exact = params["exact"] as? Boolean ?: false
+
+            val nodes = service.findNodesByText(text, exact)
+            if (nodes.isEmpty()) {
+                return@Tool ToolResult.failure("未找到包含\"$text\"的控件，请尝试使用 get_ui_hierarchy 查看可用控件")
+            }
+
+            // 找到第一个可点击的节点或其父节点
+            for (node in nodes) {
+                val clicked = service.clickNode(node)
+                if (clicked) {
+                    val nodeText = node.text?.toString() ?: ""
+                    return@Tool ToolResult.success("成功点击 \"$nodeText\"")
+                }
+
+                // 尝试父节点
+                var parent = node.parent
+                while (parent != null) {
+                    if (parent.isClickable) {
+                        val result = parent.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                        if (result) {
+                            val parentText = parent.text?.toString() ?: text
+                            return@Tool ToolResult.success("成功点击 \"$parentText\" (父节点)")
+                        }
+                    }
+                    parent = parent.parent
+                }
+            }
+
+            ToolResult.failure("找到控件但点击失败，可能需要改用坐标点击: click(x, y)")
+        }
+    )
+
+    private fun createLongClickByTextTool() = Tool(
+        name = "long_click_by_text",
+        description = "根据文本长按屏幕上的控件。",
+        category = ToolCategory.UI_ELEMENT,
+        parameters = listOf(
+            ToolParam("text", "string", "要长按的控件文本"),
+            ToolParam("exact", "boolean", "是否精确匹配，默认false", required = false),
+            ToolParam("duration", "integer", "长按时长(毫秒)，默认500", required = false)
+        ),
+        execute = { params, ctx ->
+            val service = AutoService.getInstance()
+                ?: return@Tool ToolResult.failure("无障碍服务未启用")
+
+            val text = params["text"] as? String
+                ?: return@Tool ToolResult.failure("缺少必需参数: text")
+            val exact = params["exact"] as? Boolean ?: false
+            val duration = (params["duration"] as? Number)?.toLong() ?: 500L
+
+            val nodes = service.findNodesByText(text, exact)
+            if (nodes.isEmpty()) {
+                return@Tool ToolResult.failure("未找到包含\"$text\"的控件")
+            }
+
+            val node = nodes.first()
+            val result = service.longClickNode(node, duration)
+            if (result) {
+                ToolResult.success("成功长按 \"$text\"")
+            } else {
+                // 回退到坐标长按
+                val bounds = android.graphics.Rect()
+                node.getBoundsInScreen(bounds)
+                service.longClick(bounds.centerX().toFloat(), bounds.centerY().toFloat(), duration)
+                ToolResult.success("使用坐标长按 \"$text\" (${bounds.centerX()},${bounds.centerY()})")
+            }
+        }
+    )
+
+    private fun createScrollToTextTool() = Tool(
+        name = "scroll_to_text",
+        description = "滚动屏幕直到找到指定文本的控件。适用于列表或滚动页面中查找元素。",
+        category = ToolCategory.UI_ELEMENT,
+        parameters = listOf(
+            ToolParam("text", "string", "要查找的文本"),
+            ToolParam("max_swipes", "integer", "最大滑动次数，默认10", required = false),
+            ToolParam("direction", "string", "滑动方向(up/down)，默认auto自动检测", required = false, enum = listOf("up", "down", "auto"))
+        ),
+        execute = { params, _ ->
+            val service = AutoService.getInstance()
+                ?: return@Tool ToolResult.failure("无障碍服务未启用")
+
+            val text = params["text"] as? String
+                ?: return@Tool ToolResult.failure("缺少必需参数: text")
+            val maxSwipes = (params["max_swipes"] as? Number)?.toInt() ?: 10
+            val direction = params["direction"] as? String ?: "auto"
+
+            // 先检查当前是否可见
+            var nodes = service.findNodesByText(text, false)
+            if (nodes.isNotEmpty()) {
+                return@Tool ToolResult.success("文本 \"$text\" 已在屏幕上可见")
+            }
+
+            // 尝试滚动查找
+            val swipeDirection = when (direction) {
+                "up" -> SwipeDirection.UP
+                "down" -> SwipeDirection.DOWN
+                else -> SwipeDirection.UP // auto默认向上滑（查看下方内容）
+            }
+
+            for (i in 1..maxSwipes) {
+                service.swipe(swipeDirection, 800, 300)
+                kotlinx.coroutines.delay(500)
+
+                nodes = service.findNodesByText(text, false)
+                if (nodes.isNotEmpty()) {
+                    return@Tool ToolResult.success("滚动 $i 次后找到 \"$text\"")
+                }
+            }
+
+            ToolResult.failure("滚动 $maxSwipes 次后仍未找到 \"$text\"")
         }
     )
 }
