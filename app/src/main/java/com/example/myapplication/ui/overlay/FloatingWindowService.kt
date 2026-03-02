@@ -31,6 +31,9 @@ class FloatingWindowService : Service() {
         @Volatile
         private var instance: FloatingWindowService? = null
 
+        // Callback for stop button click
+        var onStopButtonClick: (() -> Unit)? = null
+
         fun getInstance(): FloatingWindowService? = instance
 
         fun isRunning(): Boolean = instance != null
@@ -64,6 +67,7 @@ class FloatingWindowService : Service() {
     private var thinkingText: TextView? = null
     private var logScrollView: ScrollView? = null
     private var logText: TextView? = null
+    private var stopButton: ImageButton? = null
 
     // Window params
     private var params: WindowManager.LayoutParams? = null
@@ -198,6 +202,19 @@ class FloatingWindowService : Service() {
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
 
+        // Stop button
+        stopButton = ImageButton(context).apply {
+            layoutParams = LinearLayout.LayoutParams(36, 36).apply {
+                marginEnd = 8
+            }
+            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            setBackgroundResource(android.R.color.transparent)
+            setColorFilter(ContextCompat.getColor(context, android.R.color.holo_red_light))
+            setOnClickListener { stopTask() }
+            contentDescription = "停止"
+            visibility = View.GONE  // Only visible when task is running
+        }
+
         // Minimize button
         val minimizeBtn = ImageButton(context).apply {
             layoutParams = LinearLayout.LayoutParams(36, 36)
@@ -221,6 +238,7 @@ class FloatingWindowService : Service() {
 
         headerLayout.addView(statusIndicator)
         headerLayout.addView(statusText!!)
+        headerLayout.addView(stopBtn)
         headerLayout.addView(minimizeBtn)
         headerLayout.addView(closeBtn)
 
@@ -391,6 +409,9 @@ class FloatingWindowService : Service() {
 
     @SuppressLint("SetTextI18n")
     private fun updateUI(state: AgentState) {
+        // Update stop button visibility
+        stopButton?.visibility = if (state.isRunning) View.VISIBLE else View.GONE
+
         // Update status
         statusText?.text = if (state.isRunning) {
             "AI 助手运行中"
@@ -466,6 +487,11 @@ class FloatingWindowService : Service() {
     fun clearLog() {
         logBuffer.clear()
         logText?.text = ""
+    }
+
+    fun stopTask() {
+        logger.d("Stop button clicked in floating window")
+        onStopButtonClick?.invoke()
     }
 
     private fun removeFloatingWindow() {

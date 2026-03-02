@@ -83,6 +83,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 FloatingWindowService.getInstance()?.setAgentState(state)
             }
         }
+
+        // Set up stop button callback
+        FloatingWindowService.onStopButtonClick = {
+            cancelTask()
+        }
     }
 
     private fun setupAgentCallbacks() {
@@ -289,9 +294,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelTask() {
         logger.d("cancelTask called")
+        // 首先取消 agentEngine 的 job
+        agentEngine.cancel()
+        // 然后取消 ViewModel 的协程 job
         currentTaskJob?.cancel()
         currentTaskJob = null
-        agentEngine.cancel()
 
         val sessionId = _currentSessionId.value ?: return
         viewModelScope.launch {

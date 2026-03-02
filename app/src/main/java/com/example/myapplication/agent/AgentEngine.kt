@@ -145,10 +145,16 @@ class AgentEngine(context: Context) {
      */
     fun cancel() {
         logger.d("cancel() called")
+        // 首先取消协程 Job
         currentJob?.cancel()
-        currentJob = null
+        // 重置循环状态
         loopState = AgentLoopState.Idle
+        // 清空当前任务 Job 引用
+        currentJob = null
+        // 更新 UI 状态
         _state.value = AgentState(isRunning = false)
+        // 清空屏幕缓存
+        currentScreenBase64 = null
     }
 
     /**
@@ -254,6 +260,23 @@ class AgentEngine(context: Context) {
             onReply?.invoke(response)
 
             return@withContext AgentLoopState.Completed(response)
+        }
+
+        // 检查是否只调用了 reply/finish 工具 - 如果是，直接结束任务
+        val hasOnlyCommunicationTools = toolCalls.all { it.name == "reply" || it.name == "finish" }
+        if (hasOnlyCommunicationTools) {
+            // 执行 reply/finish 工具然后结束
+            toolCalls.forEach { tc ->
+                if (tc.name == "reply") {
+                    val message = tc.parameters["message"] as? String ?: ""
+                    onReply?.invoke(message)
+                } else if (tc.name == "finish") {
+                    val summary = tc.parameters["summary"] as? String ?: "任务完成"
+                    return@withContext AgentLoopState.Completed(summary)
+                }
+            }
+            // 如果只有 reply 没有 finish，也结束任务
+            return@withContext AgentLoopState.Completed("已回复用户")
         }
 
         // Notify tool calls

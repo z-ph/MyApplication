@@ -87,7 +87,7 @@ class ContextManager {
         return when (record.role) {
             "tool" -> mapOf(
                 "role" to "tool",
-                "tool_call_id" to (record.toolCallId ?: ""),
+                "tool_call_id" to (record.toolCallId?.takeIf { it.isNotEmpty() } ?: "call_unknown"),
                 "content" to record.content
             )
             "assistant" -> {
