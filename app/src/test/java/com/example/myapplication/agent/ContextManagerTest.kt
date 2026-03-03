@@ -98,8 +98,7 @@ class ContextManagerTest {
             ToolCallInfo(
                 id = "call_1",
                 name = "click",
-                parameters = mapOf("x" to 540, "y" to 1200),
-                rawMatch = "click(540, 1200)"
+                parameters = mapOf("x" to 540, "y" to 1200)
             )
         )
 
