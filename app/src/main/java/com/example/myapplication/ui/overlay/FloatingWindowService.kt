@@ -7,6 +7,8 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.view.*
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.widget.ImageView
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -22,6 +24,11 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Floating window service to show agent execution status
+ * Features:
+ * - Draggable with smooth touch feedback
+ * - Material Design styling
+ * - Expandable/collapsible states
+ * - Real-time status updates
  */
 class FloatingWindowService : Service() {
 
@@ -68,6 +75,7 @@ class FloatingWindowService : Service() {
     private var logScrollView: ScrollView? = null
     private var logText: TextView? = null
     private var stopButton: ImageButton? = null
+    private var dragHandle: View? = null
 
     // Window params
     private var params: WindowManager.LayoutParams? = null
@@ -80,6 +88,15 @@ class FloatingWindowService : Service() {
     // Log buffer
     private val logBuffer = StringBuilder()
     private val maxLogLines = 50
+
+    // Dragging state
+    private var initialX = 0
+    private var initialY = 0
+    private var initialTouchX = 0f
+    private var initialTouchY = 0f
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+    private var isDragging = false
 
     override fun onCreate() {
         super.onCreate()
@@ -117,7 +134,7 @@ class FloatingWindowService : Service() {
         val screenHeight = displayMetrics.heightPixels
 
         params = WindowManager.LayoutParams(
-            (screenWidth * 0.85).toInt(),
+            (screenWidth * 0.9).toInt(),
             WindowManager.LayoutParams.WRAP_CONTENT,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -136,8 +153,8 @@ class FloatingWindowService : Service() {
 
         // Minimized params
         minimizedParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            60,
+            60,
             params!!.type,
             params!!.flags,
             PixelFormat.TRANSLUCENT
@@ -159,10 +176,11 @@ class FloatingWindowService : Service() {
     private fun createExpandedView(): View {
         val context = this
 
-        // Root container
+        // Root container with Material Design background
         containerLayout = FrameLayout(context).apply {
             setBackgroundResource(R.drawable.floating_window_bg)
-            setPadding(16, 16, 16, 16)
+            elevation = 8f
+            outlineProvider = ViewOutlineProvider.BOUNDS
         }
 
         // Expanded layout
@@ -174,100 +192,200 @@ class FloatingWindowService : Service() {
             )
         }
 
-        // Header
-        val headerLayout = LinearLayout(context).apply {
+        // ===== Header Section =====
+        val headerLayout = createHeaderSection(context)
+
+        // ===== Drag Handle (for easy dragging) =====
+        dragHandle = createDragHandle(context)
+
+        // ===== Status Section =====
+        val statusSection = createStatusSection(context)
+
+        // ===== Action Section =====
+        val actionSection = createActionSection(context)
+
+        // ===== Thinking Section =====
+        val thinkingSection = createThinkingSection(context)
+
+        // ===== Log Section =====
+        val logSection = createLogSection(context)
+
+        // Add all sections to expanded layout
+        expandedLayout?.addView(headerLayout)
+        expandedLayout?.addView(dragHandle)
+        expandedLayout?.addView(statusSection)
+        expandedLayout?.addView(actionSection)
+        expandedLayout?.addView(thinkingSection)
+        expandedLayout?.addView(logSection)
+
+        // Minimized layout (circular button)
+        minimizedLayout = createMinimizedLayout(context)
+
+        containerLayout?.addView(expandedLayout)
+        containerLayout?.addView(minimizedLayout)
+
+        // Make it draggable with improved touch handling
+        setupDrag()
+
+        return containerLayout!!
+    }
+
+    private fun createHeaderSection(context: Context): LinearLayout {
+        return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            setPadding(0, 0, 0, 12)
-        }
-
-        // Status indicator
-        val statusIndicator = View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(16, 16).apply {
-                marginEnd = 12
+            ).apply {
+                setPadding(0, 0, 0, 12)
             }
-            setBackgroundResource(R.drawable.status_dot_running)
-        }
-
-        // Status text
-        statusText = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            text = "AI 助手运行中"
-            setTextColor(ContextCompat.getColor(context, android.R.color.white))
-            textSize = 14f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-        }
-
-        // Stop button
-        stopButton = ImageButton(context).apply {
-            layoutParams = LinearLayout.LayoutParams(36, 36).apply {
-                marginEnd = 8
+        }.apply {
+            // Status indicator with glow effect
+            val statusIndicator = View(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    resources.getDimensionPixelSize(android.R.dimen.app_icon_size),
+                    resources.getDimensionPixelSize(android.R.dimen.app_icon_size)
+                ).apply {
+                    marginEnd = 12
+                }
+                setBackgroundResource(R.drawable.status_dot_running)
+                elevation = 2f
             }
-            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-            setBackgroundResource(android.R.color.transparent)
-            setColorFilter(ContextCompat.getColor(context, android.R.color.holo_red_light))
-            setOnClickListener { stopTask() }
-            contentDescription = "停止"
-            visibility = View.GONE  // Only visible when task is running
-        }
 
-        // Minimize button
-        val minimizeBtn = ImageButton(context).apply {
-            layoutParams = LinearLayout.LayoutParams(36, 36)
-            setImageResource(android.R.drawable.ic_menu_crop)  // Use a built-in icon
-            setBackgroundResource(android.R.color.transparent)
-            setColorFilter(ContextCompat.getColor(context, android.R.color.white))
-            setOnClickListener { minimize() }
-            contentDescription = "最小化"
-        }
-
-        // Close button
-        val closeBtn = ImageButton(context).apply {
-            layoutParams = LinearLayout.LayoutParams(36, 36).apply {
-                marginStart = 8
+            // Status text
+            statusText = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                text = "AI 助手运行中"
+                setTextColor(ContextCompat.getColor(context, android.R.color.white))
+                textSize = 15f
+                setTypeface(null, android.graphics.Typeface.BOLD)
             }
-            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-            setBackgroundResource(android.R.color.transparent)
-            setColorFilter(ContextCompat.getColor(context, android.R.color.white))
-            setOnClickListener { hide() }
+
+            // Stop button with Material styling
+            stopButton = ImageButton(context).apply {
+                layoutParams = LinearLayout.LayoutParams(40, 40).apply {
+                    marginEnd = 4
+                }
+                setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+                setBackgroundResource(R.drawable.btn_circle_material)
+                setColorFilter(ContextCompat.getColor(context, android.R.color.white))
+                backgroundTintList = ContextCompat.getColorStateList(context, android.R.color.holo_red_dark)
+                scaleType = ImageView.ScaleType.CENTER
+                imageMatrix = android.graphics.Matrix().apply { preScale(0.8f, 0.8f) }
+                setOnClickListener { stopTask() }
+                contentDescription = "停止"
+                visibility = View.GONE
+                elevation = 4f
+            }
+
+            // Minimize button
+            val minimizeBtn = ImageButton(context).apply {
+                layoutParams = LinearLayout.LayoutParams(40, 40).apply {
+                    marginEnd = 4
+                }
+                setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+                setBackgroundResource(R.drawable.btn_circle_material)
+                setColorFilter(ContextCompat.getColor(context, android.R.color.white))
+                backgroundTintList = ContextCompat.getColorStateList(context, android.R.color.darker_gray)
+                scaleType = ImageView.ScaleType.CENTER
+                imageMatrix = android.graphics.Matrix().apply { preScale(0.6f, 0.6f) }
+                rotation = 90f  // Rotate to look like minimize icon
+                setOnClickListener { minimize() }
+                contentDescription = "最小化"
+                elevation = 4f
+            }
+
+            // Close button
+            val closeBtn = ImageButton(context).apply {
+                layoutParams = LinearLayout.LayoutParams(40, 40)
+                setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+                setBackgroundResource(R.drawable.btn_circle_material)
+                setColorFilter(ContextCompat.getColor(context, android.R.color.white))
+                backgroundTintList = ContextCompat.getColorStateList(context, android.R.color.darker_gray)
+                scaleType = ImageView.ScaleType.CENTER
+                setOnClickListener { hide() }
+                contentDescription = "关闭"
+                elevation = 4f
+            }
+
+            addView(statusIndicator)
+            addView(statusText!!)
+            addView(stopButton!!)
+            addView(minimizeBtn)
+            addView(closeBtn)
         }
+    }
 
-        headerLayout.addView(statusIndicator)
-        headerLayout.addView(statusText!!)
-        headerLayout.addView(stopButton!!)
-        headerLayout.addView(minimizeBtn)
-        headerLayout.addView(closeBtn)
+    private fun createDragHandle(context: Context): View {
+        return View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                resources.getDimensionPixelSize(android.R.dimen.app_icon_size)
+            ).apply {
+                setMargins(0, 0, 0, 8)
+            }
+            // Visual hint for draggability
+            setBackgroundResource(R.drawable.drag_handle_bg)
+            contentDescription = "拖动区域"
+        }
+    }
 
-        // Step info
-        stepText = TextView(context).apply {
+    private fun createStatusSection(context: Context): LinearLayout {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 8, 0, 8)
+            }
+        }.apply {
+            // Step info with progress bar style
+            stepText = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                text = "步骤：0/20"
+                setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
+                textSize = 12f
+                setPadding(0, 4, 0, 4)
+            }
+
+            // Current action with emphasis
+            actionText = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                text = "等待任务..."
+                setTextColor(ContextCompat.getColor(context, android.R.color.white))
+                textSize = 14f
+                setPadding(0, 8, 0, 8)
+                setTypeface(null, android.graphics.Typeface.NORMAL)
+            }
+
+            addView(stepText!!)
+            addView(actionText!!)
+        }
+    }
+
+    private fun createActionSection(context: Context): TextView {
+        return TextView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            text = "步骤: 0/20"
-            setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
-            textSize = 12f
-            setPadding(0, 4, 0, 8)
-        }
-
-        // Current action
-        actionText = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            text = "等待任务..."
-            setTextColor(ContextCompat.getColor(context, android.R.color.white))
+            setTextColor(ContextCompat.getColor(context, android.R.color.holo_blue_light))
             textSize = 13f
-            setPadding(0, 4, 0, 4)
+            setPadding(0, 8, 0, 8)
+            visibility = View.GONE
         }
+    }
 
-        // Thinking text
-        thinkingText = TextView(context).apply {
+    private fun createThinkingSection(context: Context): TextView {
+        return TextView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -277,99 +395,142 @@ class FloatingWindowService : Service() {
             setPadding(0, 4, 0, 8)
             visibility = View.GONE
         }
+    }
 
-        // Log section
-        val logLabel = TextView(context).apply {
+    private fun createLogSection(context: Context): LinearLayout {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            text = "执行日志"
-            setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
-            textSize = 11f
-            setPadding(0, 8, 0, 4)
+            ).apply {
+                setMargins(0, 8, 0, 0)
+            }
+        }.apply {
+            // Log label
+            val logLabel = TextView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                text = "执行日志"
+                setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
+                textSize = 11f
+                setPadding(0, 4, 0, 4)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+
+            // Scrollable log area
+            logScrollView = ScrollView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    150
+                )
+                setBackgroundResource(R.drawable.log_bg)
+                setPadding(12, 12, 12, 12)
+                isVerticalScrollBarEnabled = true
+            }
+
+            logText = TextView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                )
+                text = ""
+                setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
+                textSize = 11f
+                setLineSpacing(0f, 1.3f)
+            }
+            logScrollView?.addView(logText)
+
+            addView(logLabel)
+            addView(logScrollView!!)
         }
+    }
 
-        logScrollView = ScrollView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                150
-            )
-            setBackgroundResource(R.drawable.log_bg)
-            setPadding(8, 8, 8, 8)
-        }
-
-        logText = TextView(context).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            )
-            text = ""
-            setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
-            textSize = 11f
-        }
-        logScrollView?.addView(logText)
-
-        expandedLayout!!.addView(headerLayout)
-        expandedLayout!!.addView(stepText)
-        expandedLayout!!.addView(actionText)
-        expandedLayout!!.addView(thinkingText)
-        expandedLayout!!.addView(logLabel)
-        expandedLayout!!.addView(logScrollView)
-
-        // Minimized layout
-        minimizedLayout = FrameLayout(context).apply {
+    private fun createMinimizedLayout(context: Context): FrameLayout {
+        return FrameLayout(context).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
             setBackgroundResource(R.drawable.floating_window_minimized_bg)
-            setPadding(16, 12, 16, 12)
+            setPadding(0, 0, 0, 0)
             visibility = View.GONE
+            elevation = 8f
 
             setOnClickListener { expand() }
+        }.apply {
+            // AI icon/text in center
+            val minimizedText = TextView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                text = "AI"
+                setTextColor(ContextCompat.getColor(context, android.R.color.white))
+                textSize = 18f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                gravity = Gravity.CENTER
+            }
+            addView(minimizedText)
         }
-
-        val minimizedText = TextView(context).apply {
-            text = "AI"
-            setTextColor(ContextCompat.getColor(context, android.R.color.white))
-            textSize = 14f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-        }
-        minimizedLayout!!.addView(minimizedText)
-
-        containerLayout?.addView(expandedLayout)
-        containerLayout?.addView(minimizedLayout)
-
-        // Make it draggable
-        setupDrag()
-
-        return containerLayout!!
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupDrag() {
-        var initialX = 0
-        var initialY = 0
-        var initialTouchX = 0f
-        var initialTouchY = 0f
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
 
         floatingView?.setOnTouchListener { _, event ->
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = params?.x ?: 0
                     initialY = params?.y ?: 0
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
+                    lastTouchX = initialTouchX
+                    lastTouchY = initialTouchY
+                    isDragging = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    params?.let { p ->
-                        p.x = initialX + (event.rawX - initialTouchX).toInt()
-                        p.y = initialY + (event.rawY - initialTouchY).toInt()
-                        windowManager?.updateViewLayout(floatingView, p)
+                    val deltaX = event.rawX - lastTouchX
+                    val deltaY = event.rawY - lastTouchY
+
+                    // Check if movement exceeds touch slop
+                    if (!isDragging) {
+                        val distanceX = kotlin.math.abs(event.rawX - initialTouchX)
+                        val distanceY = kotlin.math.abs(event.rawY - initialTouchY)
+                        isDragging = distanceX > touchSlop || distanceY > touchSlop
                     }
+
+                    if (isDragging) {
+                        params?.let { p ->
+                            p.x = initialX + (event.rawX - initialTouchX).toInt()
+                            p.y = initialY + (event.rawY - initialTouchY).toInt()
+
+                            // Boundary check - keep window within screen
+                            val displayMetrics = resources.displayMetrics
+                            val screenWidth = displayMetrics.widthPixels
+                            val screenHeight = displayMetrics.heightPixels
+
+                            p.x = p.x.coerceIn(-screenWidth / 2, screenWidth / 2)
+                            p.y = p.y.coerceIn(0, screenHeight - 200)
+
+                            try {
+                                windowManager?.updateViewLayout(floatingView, p)
+                            } catch (e: Exception) {
+                                logger.e("Failed to update view position: ${e.message}")
+                            }
+                        }
+                    }
+                    lastTouchX = event.rawX
+                    lastTouchY = event.rawY
                     true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isDragging = false
+                    false
                 }
                 else -> false
             }
@@ -378,16 +539,44 @@ class FloatingWindowService : Service() {
 
     private fun minimize() {
         isMinimized = true
+        isExpanded = false
         expandedLayout?.visibility = View.GONE
         minimizedLayout?.visibility = View.VISIBLE
-        windowManager?.updateViewLayout(floatingView, minimizedParams)
+
+        // Animate transition
+        minimizedLayout?.alpha = 0f
+        minimizedLayout?.animate()
+            ?.alpha(1f)
+            ?.setDuration(200)
+            ?.setInterpolator(AccelerateDecelerateInterpolator())
+            ?.start()
+
+        try {
+            windowManager?.updateViewLayout(floatingView, minimizedParams)
+        } catch (e: Exception) {
+            logger.e("Failed to minimize: ${e.message}")
+        }
     }
 
     private fun expand() {
         isMinimized = false
+        isExpanded = true
         minimizedLayout?.visibility = View.GONE
         expandedLayout?.visibility = View.VISIBLE
-        windowManager?.updateViewLayout(floatingView, params)
+
+        // Animate transition
+        expandedLayout?.alpha = 0f
+        expandedLayout?.animate()
+            ?.alpha(1f)
+            ?.setDuration(200)
+            ?.setInterpolator(AccelerateDecelerateInterpolator())
+            ?.start()
+
+        try {
+            windowManager?.updateViewLayout(floatingView, params)
+        } catch (e: Exception) {
+            logger.e("Failed to expand: ${e.message}")
+        }
     }
 
     fun hide() {
@@ -412,19 +601,28 @@ class FloatingWindowService : Service() {
         // Update stop button visibility
         stopButton?.visibility = if (state.isRunning) View.VISIBLE else View.GONE
 
-        // Update status
-        statusText?.text = if (state.isRunning) {
-            "AI 助手运行中"
-        } else if (state.isFinished) {
-            "任务完成"
-        } else if (state.error != null) {
-            "出错: ${state.error.take(20)}"
-        } else {
-            "AI 助手待命"
+        // Update status dot color based on state
+        val headerLayout = expandedLayout?.getChildAt(0) as? LinearLayout
+        val statusIndicator = headerLayout?.getChildAt(0)
+        statusIndicator?.setBackgroundResource(
+            when {
+                state.isRunning -> R.drawable.status_dot_running
+                state.isFinished -> R.drawable.status_dot_stopped
+                state.error != null -> R.drawable.status_dot_stopped
+                else -> R.drawable.status_dot_idle
+            }
+        )
+
+        // Update status text
+        statusText?.text = when {
+            state.isRunning -> "AI 助手运行中"
+            state.isFinished -> "任务完成"
+            state.error != null -> "出错：${state.error.take(20)}"
+            else -> "AI 助手待命"
         }
 
         // Update step
-        stepText?.text = "步骤: ${state.currentStep}/${state.maxSteps}"
+        stepText?.text = "步骤：${state.currentStep}/${state.maxSteps}"
 
         // Update action
         val lastStep = state.steps.lastOrNull()
@@ -438,22 +636,22 @@ class FloatingWindowService : Service() {
                     is AgentAction.DoubleClick -> "双击 (${action.x.toInt()}, ${action.y.toInt()})"
                     is AgentAction.Swipe -> "滑动 ${action.direction}"
                     is AgentAction.Drag -> "拖拽"
-                    is AgentAction.Type -> "输入: ${action.text.take(15)}"
+                    is AgentAction.Type -> "输入：${action.text.take(15)}"
                     is AgentAction.OpenApp -> "打开应用"
                     is AgentAction.ListApps -> "获取应用列表"
-                    is AgentAction.Reply -> "回复: ${action.message.take(20)}"
-                    is AgentAction.Finish -> "完成: ${action.summary.take(20)}"
+                    is AgentAction.Reply -> "回复：${action.message.take(20)}"
+                    is AgentAction.Finish -> "完成：${action.summary.take(20)}"
                     else -> action.toDescription()
                 }
             }
             state.isFinished -> "已完成"
-            state.error != null -> "错误: ${state.error}"
+            state.error != null -> "错误：${state.error}"
             else -> "等待任务..."
         }
 
         // Update thinking
         if (lastStep?.thinking != null) {
-            thinkingText?.text = "💭 ${lastStep.thinking}"
+            thinkingText?.text = "💡 ${lastStep.thinking}"
             thinkingText?.visibility = View.VISIBLE
         } else {
             thinkingText?.visibility = View.GONE
