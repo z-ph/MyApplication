@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,6 +44,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val TAG = "PermissionScreen"
+
+// Helper function to check overlay permission (SYSTEM_ALERT_WINDOW)
+fun checkOverlayPermission(context: android.content.Context): Boolean {
+    return Settings.canDrawOverlays(context)
+}
+
+// Helper function to check app list permission (QUERY_ALL_PACKAGES)
+fun checkAppListPermission(context: android.content.Context): Boolean {
+    // QUERY_ALL_PACKAGES is a normal permission, granted at install time
+    // We just need to check if the package manager can query packages
+    val pm = context.packageManager
+    return try {
+        // If we can query intents, the permission is granted
+        pm.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN), 0).isNotEmpty()
+    } catch (e: Exception) {
+        false
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +94,8 @@ fun PermissionScreen(
     var notificationGranted by remember { mutableStateOf(checkNotificationPermission()) }
     var apiKeyConfigured by remember { mutableStateOf(apiClient.isConfigured()) }
     var shizukuGranted by remember { mutableStateOf(ShizukuHelper.isReady()) }
+    var overlayGranted by remember { mutableStateOf(checkOverlayPermission(context)) }
+    var appListGranted by remember { mutableStateOf(checkAppListPermission(context)) }
 
     // Refresh function
     fun refreshStates() {
@@ -83,7 +104,9 @@ fun PermissionScreen(
         notificationGranted = checkNotificationPermission()
         apiKeyConfigured = apiClient.isConfigured()
         shizukuGranted = ShizukuHelper.isReady()
-        Log.d(TAG, "States refreshed: accessibility=$accessibilityGranted, screenCapture=$screenCaptureGranted, notification=$notificationGranted, apiKey=$apiKeyConfigured, shizuku=$shizukuGranted")
+        overlayGranted = checkOverlayPermission(context)
+        appListGranted = checkAppListPermission(context)
+        Log.d(TAG, "States refreshed: accessibility=$accessibilityGranted, screenCapture=$screenCaptureGranted, notification=$notificationGranted, apiKey=$apiKeyConfigured, shizuku=$shizukuGranted, overlay=$overlayGranted, appList=$appListGranted")
     }
 
     // Refresh on lifecycle resume
@@ -108,7 +131,7 @@ fun PermissionScreen(
     var showApiKey by remember { mutableStateOf(false) }
 
     // Check if all permissions are granted
-    val allGranted = accessibilityGranted && screenCaptureGranted && apiKeyConfigured
+    val allGranted = accessibilityGranted && screenCaptureGranted && apiKeyConfigured && overlayGranted && appListGranted
 
     // Update callback when all permissions are granted
     LaunchedEffect(allGranted) {
@@ -198,6 +221,34 @@ fun PermissionScreen(
                 )
             }
 
+            // Overlay Permission (SYSTEM_ALERT_WINDOW)
+            PermissionCard(
+                icon = Icons.Default.PanTool,
+                title = "悬浮窗权限",
+                description = "用于显示浮动窗口展示任务进度",
+                granted = overlayGranted,
+                onGrant = {
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    context.startActivity(intent)
+                }
+            )
+
+            // App List Permission (QUERY_ALL_PACKAGES)
+            PermissionCard(
+                icon = Icons.AutoMirrored.Filled.List,
+                title = "应用列表权限",
+                description = "用于获取和启动其他应用",
+                granted = appListGranted,
+                onGrant = {
+                    // This permission is granted at install time
+                    // If not granted, we can't do anything
+                    Log.d(TAG, "App list permission status: $appListGranted")
+                }
+            )
+
             // API Key Configuration
             PermissionCard(
                 icon = Icons.Default.Key,
@@ -242,8 +293,8 @@ fun PermissionScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Progress indicator
-            val grantedCount = listOf(accessibilityGranted, screenCaptureGranted, apiKeyConfigured).count { it }
-            val totalCount = 3
+            val grantedCount = listOf(accessibilityGranted, screenCaptureGranted, overlayGranted, appListGranted, apiKeyConfigured).count { it }
+            val totalCount = 5
 
             Card(
                 modifier = Modifier.fillMaxWidth(),

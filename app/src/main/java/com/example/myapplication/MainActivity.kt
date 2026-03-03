@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
@@ -25,9 +26,9 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -58,6 +59,7 @@ import com.example.myapplication.ui.screens.LogScreen
 import com.example.myapplication.ui.screens.MainScreen
 import com.example.myapplication.ui.screens.PermissionScreen
 import com.example.myapplication.ui.screens.SystemPromptScreen
+import com.example.myapplication.ui.screens.TypeToolTestScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -99,7 +101,13 @@ class MainActivity : ComponentActivity() {
     private fun checkPermissions() {
         val screenCaptureReady = ScreenCapture.isProjectionActive()
         val apiReady = apiClient.isConfigured()
-        hasAllPermissions = AutoService.isEnabled() && screenCaptureReady && apiReady
+        val overlayReady = android.provider.Settings.canDrawOverlays(this)
+        val appListReady = try {
+            packageManager.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN), 0).isNotEmpty()
+        } catch (e: Exception) {
+            false
+        }
+        hasAllPermissions = AutoService.isEnabled() && screenCaptureReady && apiReady && overlayReady && appListReady
     }
 }
 
@@ -184,7 +192,8 @@ fun MainApp(
                                 onNavigateToApiConfig = { profileSubPage = ProfileSubPage.API_CONFIG },
                                 onNavigateToPrompt = { profileSubPage = ProfileSubPage.PROMPT },
                                 onNavigateToApiTest = { profileSubPage = ProfileSubPage.API_TEST },
-                                onNavigateToDebugTest = { profileSubPage = ProfileSubPage.DEBUG_TEST }
+                                onNavigateToDebugTest = { profileSubPage = ProfileSubPage.DEBUG_TEST },
+                                onNavigateToTypeToolTest = { profileSubPage = ProfileSubPage.TYPE_TOOL_TEST }
                             )
                         }
                         ProfileSubPage.SETTINGS -> {
@@ -218,6 +227,11 @@ fun MainApp(
                                 onNavigateBack = { profileSubPage = ProfileSubPage.MAIN }
                             )
                         }
+                        ProfileSubPage.TYPE_TOOL_TEST -> {
+                            TypeToolTestScreen(
+                                onNavigateBack = { profileSubPage = ProfileSubPage.MAIN }
+                            )
+                        }
                     }
                 }
             }
@@ -230,7 +244,7 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     CHAT("Chat", Icons.Default.Home),
-    LOGS("Logs", Icons.Default.List),
+    LOGS("Logs", Icons.AutoMirrored.Filled.List),
     PROFILE("我的", Icons.Default.AccountBox),
 }
 
@@ -240,7 +254,8 @@ enum class ProfileSubPage {
     API_CONFIG,
     PROMPT,
     API_TEST,
-    DEBUG_TEST
+    DEBUG_TEST,
+    TYPE_TOOL_TEST
 }
 
 @Composable
@@ -250,7 +265,8 @@ fun ProfileScreen(
     onNavigateToApiConfig: () -> Unit = {},
     onNavigateToPrompt: () -> Unit = {},
     onNavigateToApiTest: () -> Unit = {},
-    onNavigateToDebugTest: () -> Unit = {}
+    onNavigateToDebugTest: () -> Unit = {},
+    onNavigateToTypeToolTest: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val taskEngine = MyApplication.getTaskEngine()
@@ -402,6 +418,13 @@ fun ProfileScreen(
                     title = "调试测试",
                     subtitle = "Shell和应用测试",
                     onClick = onNavigateToDebugTest
+                )
+
+                MenuItem(
+                    icon = Icons.Default.Build,
+                    title = "Type工具测试",
+                    subtitle = "测试输入框文本覆盖/追加行为",
+                    onClick = onNavigateToTypeToolTest
                 )
             }
         }
