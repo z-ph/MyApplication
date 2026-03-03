@@ -95,6 +95,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.mockk)
     testImplementation(libs.truth)
+    testImplementation("androidx.test:core-ktx:1.5.0")
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
