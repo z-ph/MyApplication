@@ -2,6 +2,7 @@ package com.example.myapplication
 
 import android.app.Application
 import android.content.Context
+import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.api.ZhipuApiClient
 import com.example.myapplication.engine.TaskEngine
 import com.example.myapplication.shell.ShizukuHelper
@@ -35,6 +36,7 @@ class MyApplication : Application() {
         fun getZhipuApiClient(): ZhipuApiClient = getInstance().zhipuApiClient
         fun getApiClient(): ZhipuApiClient = getInstance().zhipuApiClient  // Alias for convenience
         fun getShellExecutor(): ShellExecutor = getInstance().shellExecutor
+        fun getLangChainAgentEngine(): LangChainAgentEngine = getInstance().langChainAgentEngine
     }
 
     private val logger = Logger(TAG)
@@ -55,6 +57,11 @@ class MyApplication : Application() {
     val shellExecutor: ShellExecutor by lazy {
         logger.d("Creating ShellExecutor")
         ShellExecutor(applicationContext)
+    }
+
+    val langChainAgentEngine: LangChainAgentEngine by lazy {
+        logger.d("Creating LangChainAgentEngine")
+        LangChainAgentEngine.getInstance(applicationContext)
     }
 
     override fun onCreate() {
@@ -85,6 +92,18 @@ class MyApplication : Application() {
             logger.i("Shizuku initialized")
         } catch (e: Exception) {
             logger.w("Shizuku not available: ${e.message}")
+        }
+
+        // Initialize LangChain Agent Engine
+        try {
+            val initResult = langChainAgentEngine.initialize()
+            if (initResult.isSuccess) {
+                logger.i("LangChainAgentEngine initialized successfully")
+            } else {
+                logger.w("LangChainAgentEngine not configured: ${initResult.exceptionOrNull()?.message}")
+            }
+        } catch (e: Exception) {
+            logger.w("LangChainAgentEngine initialization failed: ${e.message}")
         }
 
         // API key is automatically loaded from PreferencesManager by ZhipuApiClient

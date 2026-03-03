@@ -27,11 +27,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as MyApplication
     private val logger = Logger(TAG)
 
-    // Agent engine
-    private val agentEngine = AgentEngine(application).apply {
-        apiClient = app.zhipuApiClient
-    }
-
+    private val langChainAgentEngine = app.langChainAgentEngine
     private val taskEngine = app.taskEngine
 
     // UI State
@@ -55,8 +51,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         .map { sessionId -> repository.getSessionById(sessionId) }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    val agentState: StateFlow<AgentState> = agentEngine.state
-    val isTaskRunning: StateFlow<Boolean> = agentEngine.state.map { it.isRunning }
+    val agentState: StateFlow<LangChainAgentEngine.AgentState> = langChainAgentEngine.state
+    val isTaskRunning: StateFlow<Boolean> = langChainAgentEngine.state.map { 
+        it.state == LangChainAgentEngine.AgentStateType.RUNNING 
+    }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var currentTaskJob: Job? = null
@@ -77,101 +75,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun setupFloatingWindowSync() {
-        // Sync agent state to floating window
         floatingWindowJob = viewModelScope.launch {
-            agentEngine.state.collect { state ->
-                FloatingWindowService.getInstance()?.setAgentState(state)
+            langChainAgentEngine.state.collect { state ->
+                FloatingWindowService.getInstance()?.setLangChainAgentState(state)
             }
         }
 
-        // Set up stop button callback
         FloatingWindowService.onStopButtonClick = {
             cancelTask()
         }
     }
 
     private fun setupAgentCallbacks() {
-        // AI replies to user
-        agentEngine.onReply = { message ->
-            val sessionId = _currentSessionId.value
-            if (sessionId != null) {
-                viewModelScope.launch {
-                    val aiMessage = ChatMessage.AiMessage(
-                        id = UUID.randomUUID().toString(),
-                        timestamp = System.currentTimeMillis(),
-                        content = message,
-                        isSuccess = true
-                    )
-                    repository.addMessage(sessionId, aiMessage)
-                }
-            }
-        }
-
-        // AI thinking
-        agentEngine.onThinking = { thinking ->
-            val sessionId = _currentSessionId.value
-            if (sessionId != null) {
-                viewModelScope.launch {
-                    val aiMessage = ChatMessage.AiMessage(
-                        id = "thinking_${System.currentTimeMillis()}",
-                        timestamp = System.currentTimeMillis(),
-                        content = "💭 $thinking",
-                        isSuccess = true
-                    )
-                    repository.addMessage(sessionId, aiMessage)
-                }
-            }
-        }
-
-        // Tool call
-        agentEngine.onToolCall = { toolCall ->
-            val sessionId = _currentSessionId.value
-            if (sessionId != null) {
-                viewModelScope.launch {
-                    val toolMessage = ChatMessage.ToolCallMessage(
-                        id = UUID.randomUUID().toString(),
-                        timestamp = System.currentTimeMillis(),
-                        toolName = toolCall.name,
-                        parameters = toolCall.parameters,
-                        result = toolCall.rawMatch,
-                        isSuccess = true
-                    )
-                    repository.addMessage(sessionId, toolMessage)
-                }
-            }
-        }
-
-        // Step complete
-        agentEngine.onStepComplete = { step ->
-            val sessionId = _currentSessionId.value
-            if (sessionId != null) {
-                viewModelScope.launch {
-                    if (step.observation != null && step.action !is AgentAction.Reply) {
-                        val obsMessage = ChatMessage.StatusMessage(
-                            id = UUID.randomUUID().toString(),
-                            timestamp = System.currentTimeMillis(),
-                            status = "📋 ${step.observation}",
-                            isRunning = false
-                        )
-                        repository.addMessage(sessionId, obsMessage)
-                    }
-                }
-            }
-        }
+        // LangChainAgentEngine handles callbacks through the execute method
+        // Messages are added directly in executeWithAgent
     }
 
     fun createNewSession(title: String = "新会话") {
         viewModelScope.launch {
-            // Clear agent context when creating new session
-            agentEngine.clearContext()
+            langChainAgentEngine.clearMemory()
             val session = repository.createSession(title)
             _currentSessionId.value = session.id
         }
     }
 
     fun selectSession(sessionId: String) {
-        // Clear agent context when switching sessions
-        agentEngine.clearContext()
+        langChainAgentEngine.clearMemory()
         _currentSessionId.value = sessionId
     }
 
@@ -220,63 +149,80 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun executeWithAgent(sessionId: String, instruction: String) {
         currentTaskJob = viewModelScope.launch {
-            // Start floating window service
             FloatingWindowService.start(getApplication())
             FloatingWindowService.getInstance()?.clearLog()
             FloatingWindowService.getInstance()?.show()
 
             try {
-                agentEngine.execute(instruction)  // Uses default maxSteps
-
-                // Wait for completion
-                agentEngine.state.filter { !it.isRunning }.first()
-
-                val finalState = agentEngine.state.value
-
-                // Check if last step was a Reply action (already sent via onReply callback)
-                val lastStep = finalState.steps.lastOrNull()
-                val wasReplySent = lastStep?.action is AgentAction.Reply
-
-                // Check if this was a pure chat response (no tool calls, only Finish step)
-                // In this case, onReply was already triggered in AgentEngine.processThinking
-                val wasPureChatResponse = finalState.steps.size == 1 &&
-                    finalState.steps.first().action is AgentAction.Finish &&
-                    finalState.isFinished
-
-                // Only add completion message if it wasn't already a reply or pure chat
-                if (!wasReplySent && !wasPureChatResponse) {
-                    val completeMessage = when {
-                        finalState.isFinished -> {
-                            ChatMessage.AiMessage(
-                                id = UUID.randomUUID().toString(),
-                                timestamp = System.currentTimeMillis(),
-                                content = "✅ ${finalState.finalSummary ?: "完成"}",
-                                isSuccess = true
-                            )
+                langChainAgentEngine.execute(instruction) { result ->
+                    viewModelScope.launch {
+                        val message = when {
+                            result.success && !result.isReply -> {
+                                ChatMessage.AiMessage(
+                                    id = UUID.randomUUID().toString(),
+                                    timestamp = System.currentTimeMillis(),
+                                    content = result.message,
+                                    isSuccess = true
+                                )
+                            }
+                            result.success && result.isReply -> {
+                                ChatMessage.AiMessage(
+                                    id = UUID.randomUUID().toString(),
+                                    timestamp = System.currentTimeMillis(),
+                                    content = result.message,
+                                    isSuccess = true
+                                )
+                            }
+                            else -> {
+                                ChatMessage.AiMessage(
+                                    id = UUID.randomUUID().toString(),
+                                    timestamp = System.currentTimeMillis(),
+                                    content = "❌ ${result.message}",
+                                    isSuccess = false,
+                                    errorMessage = result.message
+                                )
+                            }
                         }
-                        finalState.error != null -> {
-                            ChatMessage.AiMessage(
-                                id = UUID.randomUUID().toString(),
-                                timestamp = System.currentTimeMillis(),
-                                content = "❌ ${finalState.error}",
-                                isSuccess = false,
-                                errorMessage = finalState.error
-                            )
-                        }
-                        else -> {
-                            ChatMessage.AiMessage(
-                                id = UUID.randomUUID().toString(),
-                                timestamp = System.currentTimeMillis(),
-                                content = "⏹️ 任务已停止",
-                                isSuccess = true
-                            )
-                        }
+                        repository.addMessage(sessionId, message)
                     }
-
-                    repository.addMessage(sessionId, completeMessage)
                 }
 
-                // Hide floating window after a delay
+                agentState.filter { it.state != LangChainAgentEngine.AgentStateType.RUNNING }.first()
+
+                val finalState = langChainAgentEngine.state.value
+
+                when (finalState.state) {
+                    LangChainAgentEngine.AgentStateType.COMPLETED -> {
+                        val completeMessage = ChatMessage.AiMessage(
+                            id = UUID.randomUUID().toString(),
+                            timestamp = System.currentTimeMillis(),
+                            content = "✅ ${finalState.result ?: "完成"}",
+                            isSuccess = true
+                        )
+                        repository.addMessage(sessionId, completeMessage)
+                    }
+                    LangChainAgentEngine.AgentStateType.ERROR -> {
+                        val errorMessage = ChatMessage.AiMessage(
+                            id = UUID.randomUUID().toString(),
+                            timestamp = System.currentTimeMillis(),
+                            content = "❌ ${finalState.error ?: "未知错误"}",
+                            isSuccess = false,
+                            errorMessage = finalState.error
+                        )
+                        repository.addMessage(sessionId, errorMessage)
+                    }
+                    LangChainAgentEngine.AgentStateType.CANCELLED -> {
+                        val cancelMessage = ChatMessage.AiMessage(
+                            id = UUID.randomUUID().toString(),
+                            timestamp = System.currentTimeMillis(),
+                            content = "⏹️ 任务已取消",
+                            isSuccess = true
+                        )
+                        repository.addMessage(sessionId, cancelMessage)
+                    }
+                    else -> {}
+                }
+
                 kotlinx.coroutines.delay(2000)
                 FloatingWindowService.getInstance()?.hide()
 
@@ -285,7 +231,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val errorMessage = ChatMessage.AiMessage(
                     id = UUID.randomUUID().toString(),
                     timestamp = System.currentTimeMillis(),
-                    content = "❌ 执行失败: ${e.message}",
+                    content = "❌ 执行失败：${e.message}",
                     isSuccess = false,
                     errorMessage = e.message
                 )
@@ -298,9 +244,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelTask() {
         logger.d("cancelTask called")
-        // 首先取消 agentEngine 的 job，这会立即更新 agentEngine.state
-        agentEngine.cancel()
-        // 然后取消 ViewModel 的协程 job
+        langChainAgentEngine.cancel()
         currentTaskJob?.cancel()
         currentTaskJob = null
 
@@ -323,13 +267,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getReadinessStatus(): ReadinessStatus = taskEngine.getReadinessStatus()
 
-    fun getToolManager(): ToolManager = agentEngine.getToolManager()
-
     override fun onCleared() {
         super.onCleared()
         currentTaskJob?.cancel()
         floatingWindowJob?.cancel()
-        agentEngine.cancel()
+        langChainAgentEngine.cancel()
         FloatingWindowService.stop(getApplication())
     }
 }

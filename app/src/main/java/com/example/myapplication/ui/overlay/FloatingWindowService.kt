@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import com.example.myapplication.R
 import com.example.myapplication.agent.AgentAction
 import com.example.myapplication.agent.AgentState
+import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
@@ -593,6 +594,54 @@ class FloatingWindowService : Service() {
     fun setAgentState(state: AgentState) {
         scope.launch(Dispatchers.Main) {
             updateUI(state)
+        }
+    }
+
+    fun setLangChainAgentState(state: LangChainAgentEngine.AgentState) {
+        scope.launch(Dispatchers.Main) {
+            updateLangChainUI(state)
+        }
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun updateLangChainUI(state: LangChainAgentEngine.AgentState) {
+        val isRunning = state.state == LangChainAgentEngine.AgentStateType.RUNNING
+        val isFinished = state.state == LangChainAgentEngine.AgentStateType.COMPLETED
+        val hasError = state.state == LangChainAgentEngine.AgentStateType.ERROR || state.error != null
+        
+        // Update stop button visibility
+        stopButton?.visibility = if (isRunning) View.VISIBLE else View.GONE
+
+        // Update status dot color based on state
+        val headerLayout = expandedLayout?.getChildAt(0) as? LinearLayout
+        val statusIndicator = headerLayout?.getChildAt(0)
+        statusIndicator?.setBackgroundResource(
+            when {
+                isRunning -> R.drawable.status_dot_running
+                isFinished -> R.drawable.status_dot_stopped
+                hasError -> R.drawable.status_dot_stopped
+                else -> R.drawable.status_dot_idle
+            }
+        )
+
+        // Update status text
+        statusText?.text = when {
+            isRunning -> "AI 助手运行中"
+            isFinished -> "任务完成"
+            state.error != null -> "出错：${state.error.take(20)}"
+            else -> "AI 助手待命"
+        }
+
+        // Update step (not applicable for LangChain, set to 0/0)
+        stepText?.text = "步骤：0/0"
+
+        // Update action
+        actionText?.text = when (state.state) {
+            LangChainAgentEngine.AgentStateType.RUNNING -> "正在处理..."
+            LangChainAgentEngine.AgentStateType.COMPLETED -> state.result ?: "完成"
+            LangChainAgentEngine.AgentStateType.ERROR -> state.error ?: "错误"
+            LangChainAgentEngine.AgentStateType.CANCELLED -> "已取消"
+            else -> "等待中..."
         }
     }
 
