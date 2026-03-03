@@ -42,7 +42,7 @@ class AgentEngine(context: Context) {
     }
 
     private val logger = Logger(TAG)
-    private val scope = CoroutineScope(Dispatchers.Main + Job())
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val appContext = context.applicationContext
 
     // Dependencies
@@ -148,12 +148,12 @@ class AgentEngine(context: Context) {
      */
     fun cancel() {
         logger.d("cancel() called")
-        // 首先取消协程 Job
+        // 取消协程 Job
         currentJob?.cancel()
 
-        // 在主线程上同步更新状态，确保 UI 立即响应
-        kotlinx.coroutines.runBlocking {
-            kotlinx.coroutines.withContext(Dispatchers.Main) {
+        // 异步更新状态，避免 ANR
+        scope.launch {
+            withContext(Dispatchers.Main) {
                 // 重置循环状态
                 loopState = AgentLoopState.Idle
                 // 清空当前任务 Job 引用
@@ -628,11 +628,15 @@ class AgentEngine(context: Context) {
     private suspend fun captureScreenInternal(): String? = withContext(Dispatchers.IO) {
         try {
             val bitmap = screenCapture.capture() ?: return@withContext null
-            val compressed = imageCompressor.compressSmart(bitmap)
-            val base64 = base64Encoder.encode(compressed, compress = false)
-            bitmap.recycle()
-            compressed.recycle()
-            base64
+            
+            // Move CPU-intensive compression and encoding to Default dispatcher
+            withContext(Dispatchers.Default) {
+                val compressed = imageCompressor.compressSmart(bitmap)
+                val base64 = base64Encoder.encode(compressed, compress = false)
+                bitmap.recycle()
+                compressed.recycle()
+                base64
+            }
         } catch (e: Exception) {
             logger.e("Screen capture error: ${e.message}")
             null

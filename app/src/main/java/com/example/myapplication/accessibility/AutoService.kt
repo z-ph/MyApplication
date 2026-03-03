@@ -56,17 +56,23 @@ class AutoService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        event?.let {
-            when (it.eventType) {
-                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                    // Update root node cache
-                    rootNode = rootInActiveWindow
-                }
-                else -> {
-                    // Handle other events if needed
+        try {
+            event?.let {
+                when (it.eventType) {
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+                    AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                        // Update root node cache
+                        rootNode = rootInActiveWindow
+                    }
+                    else -> {
+                        // Handle other events if needed
+                    }
                 }
             }
+        } catch (e: Exception) {
+            logger.e("Accessibility event error: ${e.message}", e)
+            // Clear cached node to force refresh on next access
+            rootNode = null
         }
     }
 

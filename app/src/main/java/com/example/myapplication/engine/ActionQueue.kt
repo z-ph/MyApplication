@@ -9,6 +9,7 @@ import com.example.myapplication.utils.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +30,7 @@ class ActionQueue {
 
     private val logger = Logger(TAG)
     private val executor = ActionExecutor()
-    private val scope = CoroutineScope(Dispatchers.Main)
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // Queue state
     private val _queue = MutableStateFlow<List<QueuedAction>>(emptyList())

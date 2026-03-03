@@ -6,6 +6,7 @@ import com.example.myapplication.api.ZhipuApiClient
 import com.example.myapplication.engine.TaskEngine
 import com.example.myapplication.shell.ShizukuHelper
 import com.example.myapplication.shell.ShellExecutor
+import com.example.myapplication.utils.CrashHandler
 import com.example.myapplication.utils.Logger
 
 /**
@@ -67,6 +68,10 @@ class MyApplication : Application() {
     }
 
     private fun initializeApp() {
+        // Initialize crash handler first (must be before any other initialization)
+        CrashHandler.init(applicationContext)
+        logger.i("CrashHandler initialized")
+
         // Initialize logger with file logging if needed
         val filesDir = applicationContext.getExternalFilesDir(null)
         if (filesDir != null) {

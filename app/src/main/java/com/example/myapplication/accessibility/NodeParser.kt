@@ -150,10 +150,23 @@ class NodeParser {
         node.getBoundsInScreen(bounds)
 
         val children = mutableListOf<ParsedNode>()
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val parsedChild = parseNodeRecursive(child, depth + 1)
-            parsedChild?.let { children.add(it) }
+        val childNodes = mutableListOf<AccessibilityNodeInfo>()
+        
+        try {
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                childNodes.add(child)
+                try {
+                    val parsedChild = parseNodeRecursive(child, depth + 1)
+                    parsedChild?.let { children.add(it) }
+                } catch (e: Exception) {
+                    logger.e("Error parsing child node at index $i", e)
+                    // Continue to next child
+                }
+            }
+        } finally {
+            // Critical: recycle all child nodes to prevent memory leak
+            childNodes.forEach { it.recycle() }
         }
 
         return ParsedNode(
@@ -192,9 +205,16 @@ class NodeParser {
             )
         }
 
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            findClickableNodesRecursive(child, clickableNodes)
+        val childNodes = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                childNodes.add(child)
+                findClickableNodesRecursive(child, clickableNodes)
+            }
+        } finally {
+            // Critical: recycle all child nodes to prevent memory leak
+            childNodes.forEach { it.recycle() }
         }
     }
 
@@ -208,9 +228,16 @@ class NodeParser {
             matchingNodes.add(node)
         }
 
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            findNodesByTextRecursive(child, searchText, matchingNodes)
+        val childNodes = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                childNodes.add(child)
+                findNodesByTextRecursive(child, searchText, matchingNodes)
+            }
+        } finally {
+            // Critical: recycle all child nodes to prevent memory leak
+            childNodes.forEach { it.recycle() }
         }
     }
 
@@ -224,9 +251,16 @@ class NodeParser {
             matchingNodes.add(node)
         }
 
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            findNodesByDescriptionRecursive(child, searchDescription, matchingNodes)
+        val childNodes = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                childNodes.add(child)
+                findNodesByDescriptionRecursive(child, searchDescription, matchingNodes)
+            }
+        } finally {
+            // Critical: recycle all child nodes to prevent memory leak
+            childNodes.forEach { it.recycle() }
         }
     }
 
@@ -238,9 +272,16 @@ class NodeParser {
             editableNodes.add(node)
         }
 
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            findEditableNodesRecursive(child, editableNodes)
+        val childNodes = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                childNodes.add(child)
+                findEditableNodesRecursive(child, editableNodes)
+            }
+        } finally {
+            // Critical: recycle all child nodes to prevent memory leak
+            childNodes.forEach { it.recycle() }
         }
     }
 
@@ -266,9 +307,16 @@ class NodeParser {
         builder.appendLine("${indent}  Bounds: $bounds")
         builder.appendLine("${indent}  Clickable: ${node.isClickable}, Editable: ${node.isEditable}")
 
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            buildTreeStringRecursive(child, builder, depth + 1)
+        val childNodes = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                childNodes.add(child)
+                buildTreeStringRecursive(child, builder, depth + 1)
+            }
+        } finally {
+            // Critical: recycle all child nodes to prevent memory leak
+            childNodes.forEach { it.recycle() }
         }
     }
 }
