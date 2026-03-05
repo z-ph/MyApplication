@@ -70,8 +70,10 @@ class ModelFetcher {
      */
     private fun fetchOpenAICompatibleModels(baseUrl: String, apiKey: String): ModelFetchResult {
         return try {
+            // baseUrl should already contain /v1 (e.g., https://api.openai.com/v1)
+            // LangChain4j convention: baseUrl includes /v1, endpoints just append /models, /chat/completions
             val cleanBaseUrl = baseUrl.trimEnd('/')
-            val modelsUrl = "$cleanBaseUrl/v1/models"
+            val modelsUrl = "$cleanBaseUrl/models"
 
             logger.d("Fetching models from: $modelsUrl")
 
