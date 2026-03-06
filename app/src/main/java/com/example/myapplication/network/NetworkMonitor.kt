@@ -3,7 +3,6 @@ package com.example.myapplication.network
 import androidx.compose.runtime.mutableStateListOf
 import com.example.myapplication.utils.Logger
 import okhttp3.Interceptor
-import okhttp3.MediaType
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody
@@ -14,6 +13,10 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "NetworkMonitor"
 
+/**
+ * Network monitor that captures HTTP requests from OkHttp (LangChain4j)
+ * Ktor requests are logged via HttpClientProvider's Logging plugin
+ */
 class NetworkMonitor private constructor() {
 
     companion object {
@@ -36,13 +39,13 @@ class NetworkMonitor private constructor() {
     fun addRequest(request: NetworkRequest) {
         requestMap[request.id] = request
         _requests.add(0, request)
-        
+
         // Keep only last 100 requests to avoid memory issues
         if (_requests.size > 100) {
             val removed = _requests.removeAt(_requests.size - 1)
             requestMap.remove(removed.id)
         }
-        
+
         logger.d("Added request: ${request.method} ${request.url} - Status: ${request.response?.status}")
     }
 
@@ -50,7 +53,7 @@ class NetworkMonitor private constructor() {
         requestMap[id]?.let { existing ->
             val updated = update(existing)
             requestMap[id] = updated
-            
+
             val index = _requests.indexOfFirst { it.id == id }
             if (index >= 0) {
                 _requests[index] = updated
@@ -64,22 +67,32 @@ class NetworkMonitor private constructor() {
         logger.d("Network monitor cleared")
     }
 
+    /**
+     * Get OkHttp Interceptor for monitoring OkHttp requests (used by LangChain4j)
+     */
     fun getInterceptor(): Interceptor {
-        return NetworkInterceptor(this)
+        return OkHttpNetworkInterceptor(this)
     }
 
-    private class NetworkInterceptor(
+    private fun generateRequestId(): String {
+        return System.currentTimeMillis().toString() + "_" + (1000..9999).random()
+    }
+
+    /**
+     * OkHttp Interceptor for monitoring OkHttp-based requests
+     */
+    private class OkHttpNetworkInterceptor(
         private val monitor: NetworkMonitor
     ) : Interceptor {
 
         override fun intercept(chain: Interceptor.Chain): Response {
             val request = chain.request()
             val startTime = System.currentTimeMillis()
-            
+
             val requestBodyString = request.body?.getBodyAsString()
-            
+
             val networkRequest = NetworkRequest(
-                id = generateRequestId(),
+                id = monitor.generateRequestId(),
                 url = request.url.toString(),
                 method = request.method,
                 requestHeaders = request.headers.toMap(),
@@ -143,10 +156,6 @@ class NetworkMonitor private constructor() {
             }
         }
 
-        private fun generateRequestId(): String {
-            return System.currentTimeMillis().toString() + "_" + (1000..9999).random()
-        }
-
         private fun okhttp3.Headers.toMap(): Map<String, String> {
             return this
                 .toList()
@@ -169,7 +178,7 @@ class NetworkMonitor private constructor() {
             val source = source()
             source.request(Long.MAX_VALUE)
             val buffer = source.buffer
-            
+
             val charset = this.contentType()?.charset() ?: Charsets.UTF_8
             return buffer.clone().readString(charset)
         }
@@ -191,7 +200,7 @@ data class NetworkRequest(
 ) {
     val status: Int get() = response?.status ?: -1
     val statusText: String get() = response?.statusText ?: error ?: "Pending"
-    
+
     fun getStatusColor(): String {
         return when {
             status == -1 -> "error"

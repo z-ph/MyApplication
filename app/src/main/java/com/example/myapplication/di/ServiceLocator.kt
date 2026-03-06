@@ -1,10 +1,12 @@
 package com.example.myapplication.di
 
 import android.content.Context
+import com.example.myapplication.api.ModelFetcher
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.preferences.AppPreferences
 import com.example.myapplication.data.repository.ApiConfigRepository
 import com.example.myapplication.data.repository.ChatRepository
+import com.example.myapplication.network.HttpClientProvider
 
 /**
  * Simple Service Locator for dependency management
@@ -25,6 +27,9 @@ object ServiceLocator {
 
     @Volatile
     private var appPreferences: AppPreferences? = null
+
+    @Volatile
+    private var modelFetcher: ModelFetcher? = null
 
     /**
      * Initialize the service locator with application context
@@ -75,14 +80,25 @@ object ServiceLocator {
     }
 
     /**
+     * Get ModelFetcher instance (singleton)
+     */
+    fun getModelFetcher(): ModelFetcher {
+        return modelFetcher ?: synchronized(this) {
+            modelFetcher ?: ModelFetcher().also { modelFetcher = it }
+        }
+    }
+
+    /**
      * Reset all instances (for testing purposes only)
      */
     fun reset() {
         synchronized(this) {
+            HttpClientProvider.close()
             database = null
             chatRepository = null
             apiConfigRepository = null
             appPreferences = null
+            modelFetcher = null
         }
     }
 }
