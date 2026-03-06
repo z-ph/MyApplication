@@ -17,18 +17,13 @@ class LangChainAgentEngine(private val context: Context) {
     companion object {
         private const val TAG = "LangChainAgentEngine"
         private const val MAX_MESSAGES = 20
-        
+
         @Volatile private var instance: LangChainAgentEngine? = null
-        @Volatile private var chuckerInterceptor: okhttp3.Interceptor? = null
 
         fun getInstance(context: Context): LangChainAgentEngine {
             return instance ?: synchronized(this) {
                 instance ?: LangChainAgentEngine(context.applicationContext).also { instance = it }
             }
-        }
-
-        fun setChuckerInterceptor(interceptor: okhttp3.Interceptor) {
-            chuckerInterceptor = interceptor
         }
     }
 
@@ -42,12 +37,12 @@ class LangChainAgentEngine(private val context: Context) {
 
     fun initialize(): Result<Unit> {
         return try {
-            val configEntity = runCatching { 
-                kotlinx.coroutines.runBlocking { 
-                    apiConfigDao.getActiveConfig() 
-                } 
+            val configEntity = runCatching {
+                kotlinx.coroutines.runBlocking {
+                    apiConfigDao.getActiveConfig()
+                }
             }.getOrNull()
-            
+
             if (configEntity == null) {
                 return Result.failure(Exception("未配置 API，请先在设置中配置"))
             }
@@ -55,6 +50,17 @@ class LangChainAgentEngine(private val context: Context) {
             val chatModel = ModelFactory.createChatModel(configEntity.toProviderConfig())
 
             val tools = AndroidTools(context.applicationContext)
+
+            // Log registered tool names for debugging
+            val toolMethods = tools.javaClass.methods
+                .filter { it.isAnnotationPresent(dev.langchain4j.agent.tool.Tool::class.java) }
+                .map { method ->
+                    // Convert camelCase to snake_case to match LangChain4j behavior
+                    method.name.replace(Regex("([a-z])([A-Z])")) { result ->
+                        "${result.groupValues[1]}_${result.groupValues[2]}"
+                    }.lowercase()
+                }
+            logger.d("注册的工具: $toolMethods")
 
             val chatMemory = MessageWindowChatMemory.withMaxMessages(MAX_MESSAGES)
 
@@ -107,6 +113,11 @@ class LangChainAgentEngine(private val context: Context) {
             }
         } catch (e: Exception) {
             logger.e("任务执行失败：${e.message}", e)
+            // Log more details for tool execution errors
+            if (e is NullPointerException && e.message?.contains("ToolExecutor") == true) {
+                logger.e("工具执行器未找到 - 可能是模型返回了未注册的工具名称")
+                logger.e("已注册工具: back, home, recents, click, long_click, swipe, type, find_nodes_by_text, click_by_text, scroll_to_text, get_ui_hierarchy, capture_screen, open_app, copy_to_clipboard, wait, finish, reply")
+            }
             _state.value = AgentState(state = AgentStateType.ERROR, error = e.message)
             callback(AgentResult.error(e.message ?: "未知错误"))
         }
@@ -156,47 +167,47 @@ class LangChainAgentEngine(private val context: Context) {
     interface Assistant {
         @SystemMessage("""
             你是一个手机自动化助手，可以通过分析屏幕来执行各种操作。
-            
+
             ## 可用工具
-            
+
             ### 导航
             - back(): 返回
             - home(): 回到主页
             - recents(): 最近任务
-            
+
             ### 手势
-            - click(x, y): 点击坐标
-            - longClick(x, y, duration): 长按
-            - swipe(direction, distance): 滑动 (up/down/left/right)
+            - click(x, y): 点击坐标 (x: 0-1080, y: 0-2400)
+            - long_click(x, y, duration): 长按
+            - swipe(direction, distance): 滑动 (direction: up/down/left/right)
             - type(text): 输入文本
-            
+
             ### UI 元素操作 (优先使用)
             - find_nodes_by_text(text, exact): 查找控件
             - click_by_text(text, exact): 根据文本点击控件
             - scroll_to_text(text, max_swipes, direction): 滚动查找文本
             - get_ui_hierarchy(): 获取控件树
-            
+
             ### 观察
             - capture_screen(): 截图
-            
+
             ### 系统
             - open_app(package_name): 打开应用
             - copy_to_clipboard(text): 复制到剪贴板
-            
+
             ### 控制
             - wait(ms): 等待
             - finish(summary): 任务完成
             - reply(message): 回复用户
-            
+
             ## 执行原则
-            
+
             1. **优先使用 UI 元素工具**: click_by_text 比 click 更可靠
             2. **逐步思考**: 每步完成后观察结果再继续
             3. **错误处理**: 失败时尝试替代方案
             4. **适时完成**: 任务完成后调用 finish()
-            
+
             ## 响应格式
-            
+
             - 正常操作：直接调用相应工具
             - 需要与用户交流：调用 reply(message)
             - 任务完成：调用 finish(summary)
