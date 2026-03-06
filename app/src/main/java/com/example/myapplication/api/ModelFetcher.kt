@@ -1,14 +1,16 @@
 package com.example.myapplication.api
 
 import com.example.myapplication.config.ModelProvider
+import com.example.myapplication.network.HttpClientProvider
 import com.example.myapplication.utils.Logger
-import com.google.gson.Gson
-import com.google.gson.JsonParser
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.util.concurrent.TimeUnit
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /**
  * Result of fetching models
@@ -29,16 +31,30 @@ data class ModelInfo(
 )
 
 /**
- * Fetches available models from API providers
+ * Response structure for OpenAI-compatible /models endpoint
+ */
+@Serializable
+data class OpenAIModelsResponse(
+    val data: List<OpenAIModel> = emptyList()
+)
+
+@Serializable
+data class OpenAIModel(
+    val id: String,
+    val `object`: String? = null,
+    val created: Long? = null,
+    val owned_by: String? = null
+)
+
+/**
+ * Fetches available models from API providers using Ktor
  */
 class ModelFetcher {
     private val logger = Logger("ModelFetcher")
-    private val gson = Gson()
-
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
     /**
      * Fetch models from a provider
@@ -52,8 +68,8 @@ class ModelFetcher {
             val actualBaseUrl = baseUrl.ifEmpty { provider.defaultBaseUrl }
 
             when (provider.id) {
-                ModelProvider.ZHIPU.id -> fetchZhipuModels(actualBaseUrl, apiKey)
-                ModelProvider.QWEN.id -> fetchQwenModels(actualBaseUrl, apiKey)
+                ModelProvider.ZHIPU.id -> fetchZhipuModels()
+                ModelProvider.QWEN.id -> fetchQwenModels()
                 else -> fetchOpenAICompatibleModels(actualBaseUrl, apiKey)
             }
         } catch (e: Exception) {
@@ -68,42 +84,35 @@ class ModelFetcher {
     /**
      * Fetch models from OpenAI-compatible API (OpenAI, DeepSeek, custom)
      */
-    private fun fetchOpenAICompatibleModels(baseUrl: String, apiKey: String): ModelFetchResult {
+    private suspend fun fetchOpenAICompatibleModels(baseUrl: String, apiKey: String): ModelFetchResult {
         return try {
-            // baseUrl should already contain /v1 (e.g., https://api.openai.com/v1)
-            // LangChain4j convention: baseUrl includes /v1, endpoints just append /models, /chat/completions
             val cleanBaseUrl = baseUrl.trimEnd('/')
             val modelsUrl = "$cleanBaseUrl/models"
 
             logger.d("Fetching models from: $modelsUrl")
 
-            val request = Request.Builder()
-                .url(modelsUrl)
-                .header("Authorization", "Bearer $apiKey")
-                .header("Content-Type", "application/json")
-                .get()
-                .build()
+            val client = HttpClientProvider.getKtorClient()
+            val response = client.get(modelsUrl) {
+                header("Authorization", "Bearer $apiKey")
+            }
 
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string()
-
-            if (!response.isSuccessful || responseBody == null) {
+            if (!response.status.value.toString().startsWith("2")) {
                 return ModelFetchResult(
                     isSuccess = false,
-                    error = "HTTP ${response.code}: ${response.message}"
+                    error = "HTTP ${response.status.value}: ${response.status.description}"
                 )
             }
 
-            val json = JsonParser.parseString(responseBody).asJsonObject
-            val dataArray = json.getAsJsonArray("data")
+            val responseBody = response.bodyAsText()
+            val modelsResponse = json.decodeFromString<OpenAIModelsResponse>(responseBody)
 
-            val models = dataArray.mapNotNull { element ->
+            val models = modelsResponse.data.mapNotNull { model ->
                 try {
-                    val modelObj = element.asJsonObject
-                    val id = modelObj.get("id")?.asString ?: return@mapNotNull null
-                    val name = modelObj.get("id")?.asString ?: id
-                    val ownedBy = modelObj.get("owned_by")?.asString
-                    ModelInfo(id, name, ownedBy)
+                    ModelInfo(
+                        id = model.id,
+                        name = model.id,
+                        ownedBy = model.owned_by
+                    )
                 } catch (e: Exception) {
                     null
                 }
@@ -122,11 +131,10 @@ class ModelFetcher {
 
     /**
      * Fetch models from Zhipu AI
-     * Note: Zhipu uses a different API structure
+     * Note: Zhipu doesn't have a /v1/models endpoint, return known models
      */
-    private fun fetchZhipuModels(baseUrl: String, apiKey: String): ModelFetchResult {
+    private fun fetchZhipuModels(): ModelFetchResult {
         return try {
-            // Zhipu doesn't have a /v1/models endpoint, return known models
             val knownModels = listOf(
                 ModelInfo("glm-4v", "GLM-4V (Vision)", "zhipu"),
                 ModelInfo("glm-4v-plus", "GLM-4V Plus (Vision)", "zhipu"),
@@ -150,11 +158,10 @@ class ModelFetcher {
 
     /**
      * Fetch models from Qwen (Tongyi Qianwen)
-     * Note: Qwen uses a different API structure
+     * Note: Qwen doesn't have a standard models endpoint, return known models
      */
-    private fun fetchQwenModels(baseUrl: String, apiKey: String): ModelFetchResult {
+    private fun fetchQwenModels(): ModelFetchResult {
         return try {
-            // Qwen doesn't have a standard models endpoint, return known models
             val knownModels = listOf(
                 ModelInfo("qwen-vl-max", "Qwen VL Max (Vision)", "alibaba"),
                 ModelInfo("qwen-vl-plus", "Qwen VL Plus (Vision)", "alibaba"),
