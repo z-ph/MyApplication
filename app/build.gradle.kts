@@ -59,11 +59,16 @@ dependencies {
     // Material Icons Extended
     implementation(libs.androidx.compose.material.icons.extended)
 
-    // Network requests
-    implementation("com.squareup.retrofit2:retrofit:2.11.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    // Network requests - OkHttp (for LangChain4j)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // Ktor HTTP Client (for custom HTTP code)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.android)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.ktor.client.logging)
 
     // JSON parsing
     implementation("com.google.code.gson:gson:2.11.0")
@@ -86,7 +91,6 @@ dependencies {
 
     // LangChain4j
     implementation(libs.langchain4j)
-    implementation(libs.langchain4j.zhipu.ai)
     implementation(libs.langchain4j.open.ai)
     implementation(libs.langchain4j.anthropic)
     implementation(libs.langchain4j.ollama)
