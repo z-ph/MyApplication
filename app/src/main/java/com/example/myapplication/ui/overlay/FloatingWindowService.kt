@@ -579,13 +579,17 @@ class FloatingWindowService : Service() {
     }
 
     fun hide() {
-        floatingView?.visibility = View.GONE
+        scope.launch(Dispatchers.Main) {
+            floatingView?.visibility = View.GONE
+        }
     }
 
     fun show() {
-        floatingView?.visibility = View.VISIBLE
-        if (isMinimized) {
-            expand()
+        scope.launch(Dispatchers.Main) {
+            floatingView?.visibility = View.VISIBLE
+            if (isMinimized) {
+                expand()
+            }
         }
     }
 
@@ -657,8 +661,10 @@ class FloatingWindowService : Service() {
     }
 
     fun clearLog() {
-        logBuffer.clear()
-        logText?.text = ""
+        scope.launch(Dispatchers.Main) {
+            logBuffer.clear()
+            logText?.text = ""
+        }
     }
 
     fun stopTask() {
