@@ -2,19 +2,13 @@ package com.example.myapplication.network
 
 import androidx.compose.runtime.mutableStateListOf
 import com.example.myapplication.utils.Logger
-import okhttp3.Interceptor
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.ResponseBody
-import okio.Buffer
-import java.io.IOException
-import java.nio.charset.Charset
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "NetworkMonitor"
 
 /**
- * Network monitor that captures HTTP requests from OkHttp (LangChain4j)
+ * Network monitor that captures HTTP requests
+ * Works with KtorHttpClient for LangChain4j requests
  * Ktor requests are logged via HttpClientProvider's Logging plugin
  */
 class NetworkMonitor private constructor() {
@@ -67,121 +61,8 @@ class NetworkMonitor private constructor() {
         logger.d("Network monitor cleared")
     }
 
-    /**
-     * Get OkHttp Interceptor for monitoring OkHttp requests (used by LangChain4j)
-     */
-    fun getInterceptor(): Interceptor {
-        return OkHttpNetworkInterceptor(this)
-    }
-
-    private fun generateRequestId(): String {
+    fun generateRequestId(): String {
         return System.currentTimeMillis().toString() + "_" + (1000..9999).random()
-    }
-
-    /**
-     * OkHttp Interceptor for monitoring OkHttp-based requests
-     */
-    private class OkHttpNetworkInterceptor(
-        private val monitor: NetworkMonitor
-    ) : Interceptor {
-
-        override fun intercept(chain: Interceptor.Chain): Response {
-            val request = chain.request()
-            val startTime = System.currentTimeMillis()
-
-            val requestBodyString = request.body?.getBodyAsString()
-
-            val networkRequest = NetworkRequest(
-                id = monitor.generateRequestId(),
-                url = request.url.toString(),
-                method = request.method,
-                requestHeaders = request.headers.toMap(),
-                requestSize = request.body?.contentLength() ?: 0,
-                requestBody = requestBodyString
-            )
-
-            try {
-                val response: Response
-                try {
-                    response = chain.proceed(request)
-                } catch (e: IOException) {
-                    val endTime = System.currentTimeMillis()
-                    monitor.addRequest(
-                        networkRequest.copy(
-                            duration = endTime - startTime,
-                            response = NetworkResponse(
-                                status = -1,
-                                statusText = "Network Error: ${e.message}",
-                                headers = emptyMap(),
-                                body = null
-                            ),
-                            timestamp = System.currentTimeMillis(),
-                            error = e.message
-                        )
-                    )
-                    throw e
-                }
-
-                val endTime = System.currentTimeMillis()
-                val contentType = response.body?.contentType()
-                val bodyString = response.body?.let { body ->
-                    val buffer = Buffer()
-                    body.source().use { source ->
-                        source.request(Long.MAX_VALUE)
-                        buffer.writeAll(source)
-                    }
-                    buffer.readString(body.contentType()?.charset() ?: Charsets.UTF_8)
-                }
-
-                val networkResponse = NetworkResponse(
-                    status = response.code,
-                    statusText = response.message,
-                    headers = response.headers.toMap(),
-                    body = bodyString,
-                    contentType = contentType?.toString()
-                )
-
-                monitor.addRequest(
-                    networkRequest.copy(
-                        duration = endTime - startTime,
-                        response = networkResponse,
-                        timestamp = System.currentTimeMillis(),
-                        responseSize = response.body?.contentLength() ?: 0
-                    )
-                )
-
-                return response
-            } catch (e: Exception) {
-                throw e
-            }
-        }
-
-        private fun okhttp3.Headers.toMap(): Map<String, String> {
-            return this
-                .toList()
-                .associate { it.first to it.second }
-        }
-
-        private fun okhttp3.RequestBody?.getBodyAsString(): String? {
-            this ?: return null
-            val buffer = Buffer()
-            try {
-                writeTo(buffer)
-                return buffer.readUtf8()
-            } catch (e: Exception) {
-                return null
-            }
-        }
-
-        private fun ResponseBody?.getBodyAsString(): String? {
-            this ?: return null
-            val source = source()
-            source.request(Long.MAX_VALUE)
-            val buffer = source.buffer
-
-            val charset = this.contentType()?.charset() ?: Charsets.UTF_8
-            return buffer.clone().readString(charset)
-        }
     }
 }
 
