@@ -2,8 +2,8 @@ package com.example.myapplication.agent.langchain
 
 import com.example.myapplication.utils.Logger
 import dev.langchain4j.model.anthropic.AnthropicChatModel
-import dev.langchain4j.model.chat.ChatLanguageModel
-import dev.langchain4j.model.chat.StreamingChatLanguageModel
+import dev.langchain4j.model.chat.ChatModel
+import dev.langchain4j.model.chat.StreamingChatModel
 import dev.langchain4j.model.ollama.OllamaChatModel
 import dev.langchain4j.model.ollama.OllamaStreamingChatModel
 import dev.langchain4j.model.openai.OpenAiChatModel
@@ -23,8 +23,8 @@ data class ProviderConfig(
 /**
  * LangChain4j 模型工厂
  * 支持多种 LLM 提供商的 Chat 和 Streaming 模型创建
- * 
- * 注意：0.36.2 版本支持的提供商：
+ *
+ * 注意：1.x 版本支持的提供商：
  * - OpenAI (GPT-4, GPT-3.5)
  * - Anthropic (Claude)
  * - Ollama (本地模型)
@@ -39,7 +39,7 @@ object ModelFactory {
     /**
      * 创建同步聊天模型
      */
-    fun createChatModel(config: ProviderConfig): ChatLanguageModel {
+    fun createChatModel(config: ProviderConfig): ChatModel {
         logger.d("创建 Chat 模型: provider=${config.providerId}, model=${config.modelId}")
 
         return when (config.providerId) {
@@ -102,7 +102,7 @@ object ModelFactory {
                 // LangChain4j will append /chat/completions to baseUrl
                 // So baseUrl should include /v1 if needed (e.g., https://coding.dashscope.aliyuncs.com/v1)
                 val cleanBaseUrl = config.baseUrl.trimEnd('/')
-                
+
                 logger.d("=== LangChain 配置 ===")
                 logger.d("原始 baseUrl: ${config.baseUrl}")
                 logger.d("清理后 baseUrl: $cleanBaseUrl")
@@ -110,7 +110,7 @@ object ModelFactory {
                 logger.d("Model: ${config.modelId}")
                 logger.d("API Key: ${config.apiKey.take(10)}...${config.apiKey.takeLast(4)}")
                 logger.d("====================")
-                
+
                 OpenAiChatModel.builder()
                     .baseUrl(cleanBaseUrl)
                     .apiKey(config.apiKey)
@@ -129,7 +129,7 @@ object ModelFactory {
     /**
      * 创建流式聊天模型（用于实时响应）
      */
-    fun createStreamingModel(config: ProviderConfig): StreamingChatLanguageModel? {
+    fun createStreamingModel(config: ProviderConfig): StreamingChatModel? {
         logger.d("创建 Streaming 模型: provider=${config.providerId}, model=${config.modelId}")
 
         return when (config.providerId) {
@@ -212,7 +212,7 @@ object ModelFactory {
      */
     fun supportsVision(providerId: String, modelId: String): Boolean {
         return when (providerId) {
-            "openai", "zhipu", "custom", "azure" -> 
+            "openai", "zhipu", "custom", "azure" ->
                 modelId.contains("vision", ignoreCase = true) ||
                 modelId.contains("gpt-4o", ignoreCase = true) ||
                 modelId.contains("gpt-4-turbo", ignoreCase = true) ||
