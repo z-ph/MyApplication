@@ -59,16 +59,19 @@ dependencies {
     // Material Icons Extended
     implementation(libs.androidx.compose.material.icons.extended)
 
-    // Network requests - OkHttp (for LangChain4j)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-
-    // Ktor HTTP Client (for custom HTTP code)
+    // Ktor HTTP Client (for custom HTTP code and LangChain4j)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.android)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.client.logging)
+
+    // LangChain4j
+    implementation(libs.langchain4j)
+    implementation(libs.langchain4j.http.client)
+    implementation(libs.langchain4j.open.ai)
+    implementation(libs.langchain4j.anthropic)
+    implementation(libs.langchain4j.ollama)
 
     // JSON parsing
     implementation("com.google.code.gson:gson:2.11.0")
@@ -88,12 +91,6 @@ dependencies {
     // Shizuku
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
-
-    // LangChain4j
-    implementation(libs.langchain4j)
-    implementation(libs.langchain4j.open.ai)
-    implementation(libs.langchain4j.anthropic)
-    implementation(libs.langchain4j.ollama)
 
     // DataStore - Preferences replacement
     implementation(libs.androidx.datastore.preferences)
