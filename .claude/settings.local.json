@@ -64,7 +64,8 @@
       "Bash(/opt/homebrew/share/android-commandlinetools/platform-tools/adb devices -l)",
       "Bash(echo $PATH)",
       "mcp__appium__swipe_on_screen",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

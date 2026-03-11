@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">AI Automation Assistant</string>
+    <string name="app_name">Phone Assistant</string>
     <string name="accessibility_service_description">AI Automation Assistant - Helps automate tasks on your device using AI. This service can perform clicks, swipes, and text input based on AI analysis.</string>
 </resources>
