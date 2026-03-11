@@ -65,7 +65,7 @@ class LangChainAgentEngine(private val context: Context) {
             val chatMemory = MessageWindowChatMemory.withMaxMessages(MAX_MESSAGES)
 
             assistant = AiServices.builder(Assistant::class.java)
-                .chatLanguageModel(chatModel)
+                .chatModel(chatModel)
                 .tools(tools)
                 .chatMemory(chatMemory)
                 .build()
