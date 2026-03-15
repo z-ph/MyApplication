@@ -1,10 +1,10 @@
 # Android 开发脚本
 
-本目录包含用于 Android 开发的常用 Python 脚本。
+本目录包含用于 Android 开发的常用 uv run python 脚本。
 
 ## 前置要求
 
-- Python 3.7+
+- uv 
 - Android SDK（配置好环境变量 `ANDROID_HOME` 或 `ANDROID_SDK_ROOT`）
 - ADB（添加到 PATH）
 
@@ -16,7 +16,7 @@
 
 **用法:**
 ```bash
-python scripts/build_apk.py
+uv run python scripts/build_apk.py
 ```
 
 **功能:**
@@ -34,19 +34,19 @@ python scripts/build_apk.py
 **用法:**
 ```bash
 # 安装 Debug APK 到第一个设备
-python scripts/install_to_device.py
+uv run python scripts/install_to_device.py
 
 # 安装 Release APK
-python scripts/install_to_device.py --variant release
+uv run python scripts/install_to_device.py --variant release
 
 # 安装后启动应用
-python scripts/install_to_device.py --launch
+uv run python scripts/install_to_device.py --launch
 
 # 指定设备
-python scripts/install_to_device.py --device <device-id>
+uv run python scripts/install_to_device.py --device <device-id>
 
 # 直接指定 APK 文件
-python scripts/install_to_device.py --apk /path/to/app.apk
+uv run python scripts/install_to_device.py --apk /path/to/app.apk
 ```
 
 **参数:**
@@ -64,25 +64,25 @@ python scripts/install_to_device.py --apk /path/to/app.apk
 **用法:**
 ```bash
 # 列出可用的 AVD
-python scripts/start_emulator.py list
+uv run python scripts/start_emulator.py list
 
 # 启动模拟器（交互选择）
-python scripts/start_emulator.py start
+uv run python scripts/start_emulator.py start
 
 # 启动指定 AVD
-python scripts/start_emulator.py start <avd-name>
+uv run python scripts/start_emulator.py start <avd-name>
 
 # 启动并等待设备上线
-python scripts/start_emulator.py start --wait
+uv run python scripts/start_emulator.py start --wait
 
 # 清除数据启动
-python scripts/start_emulator.py start --wipe
+uv run python scripts/start_emulator.py start --wipe
 
 # 停止模拟器
-python scripts/start_emulator.py stop
+uv run python scripts/start_emulator.py stop
 
 # 查看设备状态
-python scripts/start_emulator.py status
+uv run python scripts/start_emulator.py status
 ```
 
 **命令:**
@@ -105,20 +105,20 @@ python scripts/start_emulator.py status
 
 ```bash
 # 1. 构建 APK
-python scripts/build_apk.py
+uv run python scripts/build_apk.py
 
 # 2. 启动模拟器（如果需要）
-python scripts/start_emulator.py start --wait
+uv run python scripts/start_emulator.py start --wait
 
 # 3. 安装并启动应用
-python scripts/install_to_device.py --launch
+uv run python scripts/install_to_device.py --launch
 ```
 
 ### 快速开发迭代
 
 ```bash
 # 构建 Debug 版本并直接安装
-./gradlew assembleDebug && python scripts/install_to_device.py --launch
+./gradlew assembleDebug && uv run python scripts/install_to_device.py --launch
 ```
 
 ---
