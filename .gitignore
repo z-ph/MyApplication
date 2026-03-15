@@ -117,3 +117,6 @@ cmdline-tools/
 
 # Local tool configs
 .golutra/
+
+# Git worktrees
+.worktrees/
