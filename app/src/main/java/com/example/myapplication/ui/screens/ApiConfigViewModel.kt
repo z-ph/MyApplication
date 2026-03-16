@@ -56,16 +56,32 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
         modelId: String
     ) {
         viewModelScope.launch {
-            val result = repository.createConfig(name, provider, apiKey, baseUrl, modelId)
-            
-            result.onSuccess { config ->
-                _uiState.update { it.copy(showEditDialog = false, editingConfig = null) }
-                
-                if (config.isActive) {
-                    app.langChainAgentEngine.reconfigure()
+            try {
+                val result = repository.createConfig(name, provider, apiKey, baseUrl, modelId)
+
+                result.onSuccess { config ->
+                    _uiState.update { it.copy(showEditDialog = false, editingConfig = null) }
+
+                    if (config.isActive) {
+                        // Reconfigure on IO thread to avoid blocking main thread
+                        launch {
+                            try {
+                                val initResult = app.langChainAgentEngine.reconfigure()
+                                if (initResult.isSuccess) {
+                                    logger.d("LangChainAgentEngine reinitialized successfully")
+                                } else {
+                                    logger.w("LangChainAgentEngine reinitialize failed: ${initResult.exceptionOrNull()?.message}")
+                                }
+                            } catch (e: Exception) {
+                                logger.e("重新初始化 Agent 失败：${e.message}", e)
+                            }
+                        }
+                    }
+                }.onFailure { exception ->
+                    logger.e("创建配置失败：${exception.message}")
                 }
-            }.onFailure { exception ->
-                logger.e("创建配置失败：${exception.message}")
+            } catch (e: Exception) {
+                logger.e("创建配置异常：${e.message}", e)
             }
         }
     }
@@ -82,19 +98,35 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
         modelId: String
     ) {
         viewModelScope.launch {
-            val existing = repository.getConfigById(configId) ?: return@launch
-            val wasActive = existing.isActive
-            
-            val result = repository.updateConfig(configId, name, provider, apiKey, baseUrl, modelId)
-            
-            result.onSuccess {
-                _uiState.update { it.copy(showEditDialog = false, editingConfig = null) }
-                
-                if (wasActive) {
-                    app.langChainAgentEngine.reconfigure()
+            try {
+                val existing = repository.getConfigById(configId) ?: return@launch
+                val wasActive = existing.isActive
+
+                val result = repository.updateConfig(configId, name, provider, apiKey, baseUrl, modelId)
+
+                result.onSuccess {
+                    _uiState.update { it.copy(showEditDialog = false, editingConfig = null) }
+
+                    if (wasActive) {
+                        // Reconfigure on IO thread to avoid blocking main thread
+                        launch {
+                            try {
+                                val initResult = app.langChainAgentEngine.reconfigure()
+                                if (initResult.isSuccess) {
+                                    logger.d("LangChainAgentEngine reinitialized successfully")
+                                } else {
+                                    logger.w("LangChainAgentEngine reinitialize failed: ${initResult.exceptionOrNull()?.message}")
+                                }
+                            } catch (e: Exception) {
+                                logger.e("重新初始化 Agent 失败：${e.message}", e)
+                            }
+                        }
+                    }
+                }.onFailure { exception ->
+                    logger.e("更新配置失败：${exception.message}")
                 }
-            }.onFailure { exception ->
-                logger.e("更新配置失败：${exception.message}")
+            } catch (e: Exception) {
+                logger.e("更新配置异常：${e.message}", e)
             }
         }
     }
@@ -119,17 +151,28 @@ class ApiConfigViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun setActiveConfig(configId: String) {
         viewModelScope.launch {
-            val result = repository.setActiveConfig(configId)
-            
-            result.onSuccess {
-                val initResult = app.langChainAgentEngine.reconfigure()
-                if (initResult.isSuccess) {
-                    logger.d("LangChainAgentEngine reinitialized successfully")
-                } else {
-                    logger.w("LangChainAgentEngine reinitialize failed: ${initResult.exceptionOrNull()?.message}")
+            try {
+                val result = repository.setActiveConfig(configId)
+
+                result.onSuccess {
+                    // Reconfigure on IO thread to avoid blocking main thread
+                    launch {
+                        try {
+                            val initResult = app.langChainAgentEngine.reconfigure()
+                            if (initResult.isSuccess) {
+                                logger.d("LangChainAgentEngine reinitialized successfully")
+                            } else {
+                                logger.w("LangChainAgentEngine reinitialize failed: ${initResult.exceptionOrNull()?.message}")
+                            }
+                        } catch (e: Exception) {
+                            logger.e("重新初始化 Agent 失败：${e.message}", e)
+                        }
+                    }
+                }.onFailure { exception ->
+                    logger.e("设置活跃配置失败：${exception.message}")
                 }
-            }.onFailure { exception ->
-                logger.e("设置活跃配置失败：${exception.message}")
+            } catch (e: Exception) {
+                logger.e("设置活跃配置异常：${e.message}", e)
             }
         }
     }
