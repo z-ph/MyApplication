@@ -36,25 +36,31 @@ def main():
     # 获取项目根目录
     project_root = Path(__file__).parent.parent
 
+    # 根据平台选择 gradlew 命令
+    if sys.platform == "win32":
+        gradlew_path = project_root / "gradlew.bat"
+    else:
+        gradlew_path = project_root / "gradlew"
+
     print("=" * 60)
     print("Android APK 构建脚本")
     print("=" * 60)
 
     # 清理之前的构建
     print("\n[1/3] 清理构建目录...")
-    if not run_command("./gradlew clean", cwd=project_root):
+    if not run_command(f'"{gradlew_path}" clean', cwd=project_root):
         print("清理失败！", file=sys.stderr)
         return 1
 
     # 构建 Debug APK
     print("\n[2/3] 构建 Debug APK...")
-    if not run_command("./gradlew assembleDebug", cwd=project_root):
+    if not run_command(f'"{gradlew_path}" assembleDebug', cwd=project_root):
         print("Debug APK 构建失败！", file=sys.stderr)
         return 1
 
     # 构建 Release APK
     print("\n[3/3] 构建 Release APK...")
-    if not run_command("./gradlew assembleRelease", cwd=project_root):
+    if not run_command(f'"{gradlew_path}" assembleRelease', cwd=project_root):
         print("Release APK 构建失败！", file=sys.stderr)
         return 1
 
