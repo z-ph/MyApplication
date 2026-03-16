@@ -67,9 +67,9 @@ class ModelFetcher {
         try {
             val actualBaseUrl = baseUrl.ifEmpty { provider.defaultBaseUrl }
 
-            when (provider.id) {
-                ModelProvider.ZHIPU.id -> fetchZhipuModels()
-                ModelProvider.QWEN.id -> fetchQwenModels()
+            when (provider) {
+                ModelProvider.ZHIPU -> fetchZhipuModels()
+                ModelProvider.QWEN -> fetchQwenModels()
                 else -> fetchOpenAICompatibleModels(actualBaseUrl, apiKey)
             }
         } catch (e: Exception) {
