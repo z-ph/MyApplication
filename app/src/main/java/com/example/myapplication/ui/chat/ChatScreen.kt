@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 fun ChatScreen(
     viewModel: ChatViewModel = viewModel(),
     onOpenSettings: () -> Unit = {},
+    onNavigateToApiConfig: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -44,6 +45,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var showConfigRequiredDialog by remember { mutableStateOf(false) }
 
     val isReady = remember(agentState.state) {
         agentState.state == LangChainAgentEngine.AgentStateType.READY
@@ -125,6 +127,9 @@ fun ChatScreen(
                         if (inputText.isNotBlank()) {
                             if (isTaskRunning) {
                                 viewModel.cancelTask()
+                            } else if (!isReady && agentState.state == LangChainAgentEngine.AgentStateType.IDLE) {
+                                // No API configured, show dialog or navigate
+                                showConfigRequiredDialog = true
                             } else {
                                 viewModel.sendMessage(inputText)
                                 inputText = ""
@@ -183,6 +188,30 @@ fun ChatScreen(
                         }
                     }
                 }
+            }
+
+            // Config required dialog
+            if (showConfigRequiredDialog) {
+                AlertDialog(
+                    onDismissRequest = { showConfigRequiredDialog = false },
+                    title = { Text("需要配置 API") },
+                    text = { Text("请先配置 API 才能开始对话") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showConfigRequiredDialog = false
+                                onNavigateToApiConfig()
+                            }
+                        ) {
+                            Text("去配置")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showConfigRequiredDialog = false }) {
+                            Text("取消")
+                        }
+                    }
+                )
             }
         }
     }

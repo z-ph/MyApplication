@@ -161,6 +161,10 @@ fun MainApp(
                         onOpenSettings = {
                             currentDestination = AppDestinations.PROFILE
                             profileSubPage = ProfileSubPage.SETTINGS
+                        },
+                        onNavigateToApiConfig = {
+                            currentDestination = AppDestinations.PROFILE
+                            profileSubPage = ProfileSubPage.API_CONFIG
                         }
                     )
                 }
