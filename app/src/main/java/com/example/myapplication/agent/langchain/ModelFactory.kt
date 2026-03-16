@@ -97,6 +97,30 @@ object ModelFactory {
                     .build()
             }
 
+            // 通义千问 (使用 OpenAI 兼容接口)
+            "qwen" -> {
+                val cleanBaseUrl = config.baseUrl.takeIf { it.isNotEmpty() } ?: "https://dashscope.aliyuncs.com/v1"
+                OpenAiChatModel.builder()
+                    .baseUrl(cleanBaseUrl.trimEnd('/'))
+                    .apiKey(config.apiKey)
+                    .modelName(config.modelId)
+                    .timeout(Duration.ofSeconds(60))
+                    .maxRetries(3)
+                    .build()
+            }
+
+            // DeepSeek (使用 OpenAI 兼容接口)
+            "deepseek" -> {
+                val cleanBaseUrl = config.baseUrl.takeIf { it.isNotEmpty() } ?: "https://api.deepseek.com/v1"
+                OpenAiChatModel.builder()
+                    .baseUrl(cleanBaseUrl.trimEnd('/'))
+                    .apiKey(config.apiKey)
+                    .modelName(config.modelId)
+                    .timeout(Duration.ofSeconds(60))
+                    .maxRetries(3)
+                    .build()
+            }
+
             // 自定义 OpenAI 兼容端点
             "custom", "azure" -> {
                 // LangChain4j will append /chat/completions to baseUrl
@@ -176,6 +200,28 @@ object ModelFactory {
                     .build()
             }
 
+            // 通义千问 Streaming (OpenAI 兼容)
+            "qwen" -> {
+                val cleanBaseUrl = config.baseUrl.takeIf { it.isNotEmpty() } ?: "https://dashscope.aliyuncs.com/v1"
+                OpenAiStreamingChatModel.builder()
+                    .baseUrl(cleanBaseUrl.trimEnd('/'))
+                    .apiKey(config.apiKey)
+                    .modelName(config.modelId)
+                    .timeout(Duration.ofSeconds(60))
+                    .build()
+            }
+
+            // DeepSeek Streaming (OpenAI 兼容)
+            "deepseek" -> {
+                val cleanBaseUrl = config.baseUrl.takeIf { it.isNotEmpty() } ?: "https://api.deepseek.com/v1"
+                OpenAiStreamingChatModel.builder()
+                    .baseUrl(cleanBaseUrl.trimEnd('/'))
+                    .apiKey(config.apiKey)
+                    .modelName(config.modelId)
+                    .timeout(Duration.ofSeconds(60))
+                    .build()
+            }
+
             // 自定义/其他 OpenAI 兼容
             "custom", "azure" -> {
                 val cleanBaseUrl = config.baseUrl.trimEnd('/')
@@ -234,6 +280,17 @@ object ModelFactory {
                 "glm-4-flash",
                 "glm-4-air"
             )
+            "qwen" -> listOf(
+                "qwen-plus",
+                "qwen-turbo",
+                "qwen-max",
+                "qwen-vl-plus",
+                "qwen-vl-max"
+            )
+            "deepseek" -> listOf(
+                "deepseek-chat",
+                "deepseek-coder"
+            )
             "openai" -> listOf(
                 "gpt-4o",
                 "gpt-4o-mini",
@@ -271,6 +328,16 @@ object ModelFactory {
             "zhipu" -> Triple(
                 "https://open.bigmodel.cn/api/paas/v4",
                 "glm-4",
+                ""
+            )
+            "qwen" -> Triple(
+                "https://dashscope.aliyuncs.com/v1",
+                "qwen-plus",
+                ""
+            )
+            "deepseek" -> Triple(
+                "https://api.deepseek.com/v1",
+                "deepseek-chat",
                 ""
             )
             "openai" -> Triple(
