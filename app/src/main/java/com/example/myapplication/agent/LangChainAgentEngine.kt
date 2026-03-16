@@ -44,6 +44,8 @@ class LangChainAgentEngine(private val context: Context) {
             }.getOrNull()
 
             if (configEntity == null) {
+                logger.w("未配置 API，请先在设置中配置")
+                _state.value = AgentState(state = AgentStateType.IDLE)
                 return Result.failure(Exception("未配置 API，请先在设置中配置"))
             }
 
@@ -77,6 +79,18 @@ class LangChainAgentEngine(private val context: Context) {
             logger.e("Agent 初始化失败：${e.message}", e)
             _state.value = AgentState(state = AgentStateType.ERROR, error = e.message)
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Check if API is configured
+     */
+    suspend fun isConfigured(): Boolean {
+        return try {
+            apiConfigDao.getActiveConfig() != null
+        } catch (e: Exception) {
+            logger.e("检查配置失败：${e.message}", e)
+            false
         }
     }
 
