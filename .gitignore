@@ -120,3 +120,4 @@ cmdline-tools/
 
 # Git worktrees
 .worktrees/
+.claude
