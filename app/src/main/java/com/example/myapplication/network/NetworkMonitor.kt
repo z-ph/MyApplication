@@ -8,7 +8,7 @@ private const val TAG = "NetworkMonitor"
 
 /**
  * Network monitor that captures HTTP requests
- * Works with KtorHttpClient for LangChain4j requests
+ * Works with the default Ktor-backed LangChain HTTP transport
  * Ktor requests are logged via HttpClientProvider's Logging plugin
  */
 class NetworkMonitor private constructor() {

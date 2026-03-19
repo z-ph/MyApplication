@@ -6,7 +6,7 @@ import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.preferences.AppPreferences
 import com.example.myapplication.data.repository.ApiConfigRepository
 import com.example.myapplication.data.repository.ChatRepository
-import com.example.myapplication.network.HttpClientProvider
+import com.example.myapplication.network.LangChainHttpClientRegistry
 
 /**
  * Simple Service Locator for dependency management
@@ -93,7 +93,7 @@ object ServiceLocator {
      */
     fun reset() {
         synchronized(this) {
-            HttpClientProvider.close()
+            LangChainHttpClientRegistry.reset()
             database = null
             chatRepository = null
             apiConfigRepository = null

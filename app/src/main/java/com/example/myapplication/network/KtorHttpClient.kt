@@ -23,22 +23,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
- * LangChain4j HttpClient implementation using Ktor
- * This replaces the default JdkHttpClient with Ktor for better Android compatibility
+ * Default LangChain transport implementation backed by Ktor.
  */
-class KtorHttpClient : dev.langchain4j.http.client.HttpClient {
+class KtorHttpClient : LangChainHttpClient {
 
     companion object {
         private const val TAG = "KtorHttpClient"
-
-        @Volatile
-        private var instance: KtorHttpClient? = null
-
-        fun getInstance(): KtorHttpClient {
-            return instance ?: synchronized(this) {
-                instance ?: KtorHttpClient().also { instance = it }
-            }
-        }
     }
 
     private val logger = Logger(TAG)
@@ -219,8 +209,9 @@ class KtorHttpClient : dev.langchain4j.http.client.HttpClient {
         return System.currentTimeMillis().toString() + "_" + (1000..9999).random()
     }
 
-    fun close() {
+    override fun close() {
         scope.cancel()
+        HttpClientProvider.close()
         logger.d("KtorHttpClient closed")
     }
 }

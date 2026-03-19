@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Assistant Architecture Canvas</title>
+    <style>
+        :root {
+            --paper: #f6efe4;
+            --ink: #183028;
+            --muted: #5d6b63;
+            --teal: #1e7c74;
+            --shadow: 0 20px 60px rgba(24, 48, 40, 0.12);
+            --panel-border: rgba(24, 48, 40, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            min-height: 100%;
+            background:
+                radial-gradient(circle at top left, rgba(194, 140, 51, 0.18), transparent 24rem),
+                radial-gradient(circle at top right, rgba(30, 124, 116, 0.18), transparent 22rem),
+                linear-gradient(180deg, #fcf8f1 0%, var(--paper) 55%, #efe6d7 100%);
+            color: var(--ink);
+        }
+
+        body {
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        }
+
+        .page {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 28px 24px 32px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .hero-card,
+        .side-card {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--panel-border);
+            border-radius: 28px;
+            background: rgba(255, 251, 245, 0.84);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+        }
+
+        .hero-card {
+            padding: 28px 30px 26px;
+            min-height: 212px;
+        }
+
+        .hero-card::before,
+        .side-card::before,
+        .canvas-shell::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(
+                120deg,
+                rgba(255, 255, 255, 0.22) 0%,
+                transparent 34%,
+                transparent 66%,
+                rgba(255, 255, 255, 0.18) 100%
+            );
+            pointer-events: none;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(24, 48, 40, 0.12);
+            background: rgba(255, 255, 255, 0.56);
+            color: var(--teal);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 18px 0 10px;
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(36px, 5vw, 62px);
+            line-height: 0.95;
+            letter-spacing: -0.03em;
+        }
+
+        .hero-card p {
+            max-width: 60ch;
+            margin: 0;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .metric-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 22px;
+        }
+
+        .metric {
+            min-width: 140px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(24, 48, 40, 0.08);
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .metric strong {
+            display: block;
+            font-size: 22px;
+            line-height: 1;
+            font-family: Georgia, "Times New Roman", serif;
+        }
+
+        .metric span {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .side-card {
+            padding: 22px;
+        }
+
+        .side-card h2 {
+            margin: 0 0 14px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .legend-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .legend-item {
+            display: grid;
+            grid-template-columns: 14px 1fr;
+            gap: 10px;
+            align-items: start;
+            padding: 12px 0;
+            border-top: 1px solid rgba(24, 48, 40, 0.08);
+        }
+
+        .legend-item:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .swatch {
+            width: 14px;
+            height: 14px;
+            margin-top: 3px;
+            border-radius: 4px;
+            box-shadow: inset 0 0 0 1px rgba(24, 48, 40, 0.12);
+        }
+
+        .legend-item strong {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .legend-item p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .canvas-shell {
+            position: relative;
+            margin-top: 20px;
+            padding: 16px;
+            border-radius: 32px;
+            border: 1px solid var(--panel-border);
+            background:
+                linear-gradient(180deg, rgba(255, 252, 247, 0.86), rgba(246, 239, 228, 0.96)),
+                var(--paper);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 6px 4px 16px;
+        }
+
+        .toolbar-title {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .toolbar-title strong {
+            font-size: 17px;
+        }
+
+        .toolbar-title span {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .button {
+            appearance: none;
+            border: 1px solid rgba(24, 48, 40, 0.12);
+            background: rgba(255, 255, 255, 0.84);
+            color: var(--ink);
+            border-radius: 999px;
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+        }
+
+        .button:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 1);
+            border-color: rgba(24, 48, 40, 0.18);
+        }
+
+        .button.primary {
+            background: var(--teal);
+            border-color: var(--teal);
+            color: #fffdf9;
+        }
+
+        .zoom-label {
+            min-width: 76px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .canvas-frame {
+            position: relative;
+            overflow: hidden;
+            border-radius: 24px;
+            border: 1px solid rgba(24, 48, 40, 0.1);
+            background:
+                radial-gradient(circle at top, rgba(255, 255, 255, 0.7), transparent 40%),
+                linear-gradient(180deg, rgba(245, 239, 229, 0.96), rgba(238, 230, 216, 0.96));
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: min(76vh, 960px);
+            cursor: grab;
+        }
+
+        canvas.dragging {
+            cursor: grabbing;
+        }
+
+        .canvas-note {
+            position: absolute;
+            right: 18px;
+            bottom: 18px;
+            padding: 10px 14px;
+            border-radius: 16px;
+            background: rgba(255, 251, 245, 0.84);
+            border: 1px solid rgba(24, 48, 40, 0.08);
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+            backdrop-filter: blur(10px);
+        }
+
+        .footnote {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .chip {
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(24, 48, 40, 0.08);
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        @media (max-width: 1080px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-card {
+                min-height: auto;
+            }
+
+            .canvas-note {
+                left: 18px;
+                right: 18px;
+                bottom: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <section class="hero">
+            <article class="hero-card">
+                <span class="eyebrow">Canvas Architecture View</span>
+                <h1>Phone Assistant<br>Project Map</h1>
+                <p>
+                    这个页面把当前仓库的核心结构直接画在 Canvas 上，覆盖 UI、ViewModel、数据层、Agent、
+                    设备能力、网络适配和外部依赖。适合做方案讲解、PR 说明和项目交接。
+                </p>
+                <div class="metric-row">
+                    <div class="metric">
+                        <strong>7</strong>
+                        <span>主要分层</span>
+                    </div>
+                    <div class="metric">
+                        <strong>23</strong>
+                        <span>关键节点</span>
+                    </div>
+                    <div class="metric">
+                        <strong>31</strong>
+                        <span>核心依赖线</span>
+                    </div>
+                </div>
+            </article>
+
+            <aside class="side-card">
+                <h2>图例说明</h2>
+                <div class="legend-list">
+                    <div class="legend-item">
+                        <span class="swatch" style="background: rgba(194, 140, 51, 0.28);"></span>
+                        <div>
+                            <strong>入口 / UI</strong>
+                            <p>应用启动、权限引导、聊天页和设置页，负责把用户意图送进业务链路。</p>
+                        </div>
+                    </div>
+                    <div class="legend-item">
+                        <span class="swatch" style="background: rgba(180, 89, 63, 0.26);"></span>
+                        <div>
+                            <strong>状态 / 数据</strong>
+                            <p>ViewModel 和 Repository 负责会话、消息、API 配置与持久化。</p>
+                        </div>
+                    </div>
+                    <div class="legend-item">
+                        <span class="swatch" style="background: rgba(30, 124, 116, 0.24);"></span>
+                        <div>
+                            <strong>Agent / 能力执行</strong>
+                            <p>LangChainAgentEngine 调用 AndroidTools，再落到 Accessibility 与截图服务。</p>
+                        </div>
+                    </div>
+                    <div class="legend-item">
+                        <span class="swatch" style="background: rgba(49, 90, 115, 0.2);"></span>
+                        <div>
+                            <strong>网络 / 外部系统</strong>
+                            <p>模型请求走 LangChain SPI + Ktor 适配，最终连接 LLM Provider。</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <section class="canvas-shell">
+            <div class="toolbar">
+                <div class="toolbar-title">
+                    <strong>项目架构图</strong>
+                    <span>拖拽平移，滚轮缩放，导出当前视图</span>
+                </div>
+                <div class="toolbar-actions">
+                    <button class="button primary" id="fitButton" type="button">适配画布</button>
+                    <button class="button" id="resetButton" type="button">100%</button>
+                    <button class="button" id="exportButton" type="button">导出 PNG</button>
+                    <span class="zoom-label" id="zoomLabel">100%</span>
+                </div>
+            </div>
+
+            <div class="canvas-frame">
+                <canvas id="architectureCanvas" aria-label="Phone Assistant 项目架构图"></canvas>
+                <div class="canvas-note">
+                    主链路：<strong>ChatScreen → ChatViewModel → LangChainAgentEngine → AndroidTools</strong><br>
+                    设备侧能力：Accessibility / ScreenCapture / Shizuku
+                </div>
+            </div>
+
+            <div class="footnote">
+                <span class="chip">静态 HTML</span>
+                <span class="chip">无构建依赖</span>
+                <span class="chip">Canvas 原生绘制</span>
+                <span class="chip">支持高 DPI</span>
+            </div>
+        </section>
+    </main>
+    <script>
+        const canvas = document.getElementById("architectureCanvas");
+        const ctx = canvas.getContext("2d");
+        const zoomLabel = document.getElementById("zoomLabel");
+        const fitButton = document.getElementById("fitButton");
+        const resetButton = document.getElementById("resetButton");
+        const exportButton = document.getElementById("exportButton");
+
+        const palette = {
+            paper: "#f7f0e3",
+            ink: "#173129",
+            muted: "#627268",
+            edge: "rgba(23, 49, 41, 0.34)",
+            dashed: "rgba(180, 89, 63, 0.48)",
+            entry: "#c28c33",
+            ui: "#b4593f",
+            vm: "#c16e57",
+            data: "#9d6d2a",
+            agent: "#1e7c74",
+            device: "#2e8b86",
+            network: "#315a73",
+            external: "#54727b",
+            user: "#7e5530"
+        };
+
+        const world = { width: 2240, height: 1220 };
+
+        const groups = [
+            { id: "entry", title: "入口与应用生命周期", x: 70, y: 120, w: 320, h: 250, color: palette.entry },
+            { id: "ui", title: "UI / Compose", x: 440, y: 80, w: 620, h: 330, color: palette.ui },
+            { id: "vm", title: "ViewModel", x: 690, y: 450, w: 250, h: 220, color: palette.vm },
+            { id: "data", title: "数据层", x: 70, y: 740, w: 560, h: 340, color: palette.data },
+            { id: "agent", title: "Agent 核心", x: 730, y: 740, w: 380, h: 270, color: palette.agent },
+            { id: "device", title: "设备能力", x: 1180, y: 620, w: 470, h: 420, color: palette.device },
+            { id: "network", title: "网络与模型接入", x: 1130, y: 80, w: 620, h: 450, color: palette.network },
+            { id: "external", title: "外部系统", x: 1780, y: 220, w: 380, h: 520, color: palette.external }
+        ];
+
+        const nodes = [
+            { id: "user", x: 60, y: 24, w: 112, h: 52, color: palette.user, lines: ["用户"], featured: true },
+            { id: "mainActivity", x: 96, y: 172, w: 132, h: 60, group: "entry", lines: ["MainActivity"] },
+            { id: "myApplication", x: 242, y: 172, w: 132, h: 60, group: "entry", lines: ["MyApplication"] },
+            { id: "serviceLocator", x: 135, y: 258, w: 182, h: 72, group: "entry", lines: ["ServiceLocator"] },
+            { id: "permissionScreen", x: 478, y: 140, w: 158, h: 72, group: "ui", lines: ["PermissionScreen"] },
+            { id: "chatScreen", x: 652, y: 140, w: 158, h: 72, group: "ui", lines: ["ChatScreen"] },
+            { id: "settingsScreens", x: 828, y: 128, w: 190, h: 98, group: "ui", lines: ["MainScreen", "ApiConfigScreen", "ApiTestScreen", "DebugTestScreen"] },
+            { id: "floatingWindow", x: 648, y: 266, w: 188, h: 72, group: "ui", lines: ["FloatingWindowService"] },
+            { id: "chatViewModel", x: 724, y: 500, w: 176, h: 72, group: "vm", lines: ["ChatViewModel"] },
+            { id: "apiConfigViewModel", x: 704, y: 590, w: 216, h: 72, group: "vm", lines: ["ApiConfigViewModel"] },
+            { id: "chatRepository", x: 108, y: 804, w: 160, h: 72, group: "data", lines: ["ChatRepository"] },
+            { id: "apiConfigRepository", x: 286, y: 804, w: 170, h: 72, group: "data", lines: ["ApiConfigRepository"] },
+            { id: "appPreferences", x: 474, y: 804, w: 128, h: 72, group: "data", lines: ["AppPreferences"] },
+            { id: "room", x: 184, y: 914, w: 322, h: 104, group: "data", lines: ["AppDatabase (Room)", "Session / Message / ApiConfig"], featured: true },
+            { id: "agentEngine", x: 788, y: 792, w: 268, h: 82, group: "agent", lines: ["LangChainAgentEngine"], featured: true },
+            { id: "androidTools", x: 788, y: 902, w: 152, h: 72, group: "agent", lines: ["AndroidTools"] },
+            { id: "modelFactory", x: 958, y: 902, w: 124, h: 72, group: "agent", lines: ["ModelFactory"] },
+            { id: "autoService", x: 1216, y: 708, w: 176, h: 92, group: "device", lines: ["AutoService", "AccessibilityService"] },
+            { id: "screenCapture", x: 1412, y: 708, w: 174, h: 72, group: "device", lines: ["ScreenCapture"] },
+            { id: "screenCaptureService", x: 1412, y: 804, w: 174, h: 84, group: "device", lines: ["ScreenCaptureService"] },
+            { id: "shellExecutor", x: 1216, y: 856, w: 176, h: 72, group: "device", lines: ["ShellExecutor"] },
+            { id: "shizukuHelper", x: 1216, y: 946, w: 176, h: 72, group: "device", lines: ["ShizukuHelper"] },
+            { id: "modelFetcher", x: 1168, y: 156, w: 156, h: 72, group: "network", lines: ["ModelFetcher"] },
+            { id: "langChainSpi", x: 1340, y: 146, w: 176, h: 86, group: "network", lines: ["LangChain4j", "HttpClientSpi"] },
+            { id: "clientRegistry", x: 1536, y: 146, w: 180, h: 86, group: "network", lines: ["LangChainHttpClient", "Registry"] },
+            { id: "ktorHttpClient", x: 1260, y: 286, w: 176, h: 82, group: "network", lines: ["KtorHttpClient"] },
+            { id: "httpClientProvider", x: 1452, y: 292, w: 164, h: 72, group: "network", lines: ["HttpClientProvider"] },
+            { id: "networkMonitor", x: 1260, y: 392, w: 176, h: 72, group: "network", lines: ["NetworkMonitor"] },
+            { id: "androidSystem", x: 1810, y: 316, w: 146, h: 92, group: "external", lines: ["Android", "System UI"] },
+            { id: "otherApps", x: 1980, y: 316, w: 138, h: 92, group: "external", lines: ["已安装应用"] },
+            { id: "providers", x: 1842, y: 486, w: 234, h: 132, group: "external", lines: ["LLM Providers", "OpenAI / Zhipu /", "Qwen / DeepSeek /", "Ollama"], featured: true }
+        ];
+
+        const edges = [
+            { from: "user", to: "mainActivity", fromSide: "bottom", toSide: "top" },
+            { from: "myApplication", to: "serviceLocator", fromSide: "bottom", toSide: "right" },
+            { from: "myApplication", to: "agentEngine", fromSide: "right", toSide: "top", midX: 640 },
+            { from: "serviceLocator", to: "room", fromSide: "bottom", toSide: "top" },
+            { from: "serviceLocator", to: "chatRepository", fromSide: "bottom", toSide: "top", midX: 188 },
+            { from: "serviceLocator", to: "apiConfigRepository", fromSide: "bottom", toSide: "top", midX: 362 },
+            { from: "serviceLocator", to: "appPreferences", fromSide: "right", toSide: "top", midX: 548 },
+            { from: "serviceLocator", to: "modelFetcher", fromSide: "right", toSide: "left", midY: 184 },
+            { from: "mainActivity", to: "permissionScreen", fromSide: "right", toSide: "left", midY: 176 },
+            { from: "mainActivity", to: "chatScreen", fromSide: "right", toSide: "left", midY: 214 },
+            { from: "mainActivity", to: "settingsScreens", fromSide: "right", toSide: "left", midY: 242 },
+            { from: "chatScreen", to: "chatViewModel", fromSide: "bottom", toSide: "top", midX: 732 },
+            { from: "settingsScreens", to: "apiConfigViewModel", fromSide: "bottom", toSide: "top", midX: 934 },
+            { from: "chatViewModel", to: "floatingWindow", fromSide: "top", toSide: "bottom" },
+            { from: "chatViewModel", to: "chatRepository", fromSide: "left", toSide: "right", midX: 424 },
+            { from: "chatRepository", to: "room", fromSide: "bottom", toSide: "left", midY: 900 },
+            { from: "apiConfigViewModel", to: "apiConfigRepository", fromSide: "left", toSide: "right", midX: 472 },
+            { from: "apiConfigRepository", to: "room", fromSide: "bottom", toSide: "top", midX: 370 },
+            { from: "apiConfigViewModel", to: "modelFetcher", fromSide: "right", toSide: "left", midX: 1064 },
+            { from: "apiConfigViewModel", to: "agentEngine", fromSide: "bottom", toSide: "top", midX: 922 },
+            { from: "chatViewModel", to: "agentEngine", fromSide: "bottom", toSide: "top", midX: 810 },
+            { from: "agentEngine", to: "room", fromSide: "left", toSide: "right", midX: 620 },
+            { from: "agentEngine", to: "modelFactory", fromSide: "bottom", toSide: "top", midX: 1012 },
+            { from: "agentEngine", to: "androidTools", fromSide: "bottom", toSide: "top", midX: 862 },
+            { from: "agentEngine", to: "langChainSpi", fromSide: "top", toSide: "bottom", midX: 1382 },
+            { from: "androidTools", to: "autoService", fromSide: "right", toSide: "left", midX: 1080 },
+            { from: "androidTools", to: "screenCapture", fromSide: "right", toSide: "left", midX: 1180 },
+            { from: "screenCapture", to: "screenCaptureService", fromSide: "bottom", toSide: "top" },
+            { from: "autoService", to: "androidSystem", fromSide: "right", toSide: "left", midX: 1710 },
+            { from: "androidTools", to: "otherApps", fromSide: "right", toSide: "left", midX: 1780 },
+            { from: "settingsScreens", to: "shellExecutor", fromSide: "bottom", toSide: "top", dashed: true, midX: 1240 },
+            { from: "shellExecutor", to: "shizukuHelper", fromSide: "bottom", toSide: "top" },
+            { from: "shizukuHelper", to: "otherApps", fromSide: "right", toSide: "bottom", midX: 1750 },
+            { from: "langChainSpi", to: "clientRegistry", fromSide: "right", toSide: "left" },
+            { from: "clientRegistry", to: "ktorHttpClient", fromSide: "bottom", toSide: "top", midX: 1530 },
+            { from: "ktorHttpClient", to: "httpClientProvider", fromSide: "right", toSide: "left" },
+            { from: "ktorHttpClient", to: "networkMonitor", fromSide: "bottom", toSide: "top" },
+            { from: "modelFetcher", to: "httpClientProvider", fromSide: "bottom", toSide: "left", midX: 1394 },
+            { from: "httpClientProvider", to: "providers", fromSide: "right", toSide: "left", midY: 432 }
+        ];
+
+        const groupMap = Object.fromEntries(groups.map((group) => [group.id, group]));
+        const nodeMap = Object.fromEntries(nodes.map((node) => [node.id, node]));
+        const view = { x: 0, y: 0, scale: 1 };
+        let devicePixelRatioValue = Math.max(window.devicePixelRatio || 1, 1);
+        let dragging = false;
+        let lastPointer = { x: 0, y: 0 };
+        const animationStartedAt = performance.now();
+
+        function resizeCanvas() {
+            devicePixelRatioValue = Math.max(window.devicePixelRatio || 1, 1);
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = Math.round(rect.width * devicePixelRatioValue);
+            canvas.height = Math.round(rect.height * devicePixelRatioValue);
+            render();
+        }
+
+        function fitToView() {
+            const padding = 48;
+            const rect = canvas.getBoundingClientRect();
+            const scale = Math.min(
+                (rect.width - padding * 2) / world.width,
+                (rect.height - padding * 2) / world.height
+            );
+            view.scale = Math.max(Math.min(scale, 1.1), 0.25);
+            view.x = (rect.width - world.width * view.scale) / 2;
+            view.y = (rect.height - world.height * view.scale) / 2;
+            updateZoomLabel();
+            render();
+        }
+
+        function resetZoom() {
+            const rect = canvas.getBoundingClientRect();
+            view.scale = 1;
+            view.x = Math.max((rect.width - world.width) / 2, 32);
+            view.y = 26;
+            updateZoomLabel();
+            render();
+        }
+
+        function updateZoomLabel() {
+            zoomLabel.textContent = `${Math.round(view.scale * 100)}%`;
+        }
+
+        function rgba(hex, alpha) {
+            const value = hex.replace("#", "");
+            const r = Number.parseInt(value.slice(0, 2), 16);
+            const g = Number.parseInt(value.slice(2, 4), 16);
+            const b = Number.parseInt(value.slice(4, 6), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        function roundRectPath(x, y, width, height, radius) {
+            const r = Math.min(radius, width / 2, height / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + width - r, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+            ctx.lineTo(x + width, y + height - r);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+            ctx.lineTo(x + r, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        function drawRoundedRect(x, y, width, height, radius, fillStyle, strokeStyle, lineWidth = 1) {
+            roundRectPath(x, y, width, height, radius);
+            if (fillStyle) {
+                ctx.fillStyle = fillStyle;
+                ctx.fill();
+            }
+            if (strokeStyle) {
+                ctx.strokeStyle = strokeStyle;
+                ctx.lineWidth = lineWidth;
+                ctx.stroke();
+            }
+        }
+
+        function drawBackdrop() {
+            ctx.save();
+            ctx.fillStyle = palette.paper;
+            ctx.fillRect(0, 0, world.width, world.height);
+            for (let i = 0; i < 40; i += 1) {
+                const x = (i * 137) % world.width;
+                const y = (i * 89) % world.height;
+                ctx.fillStyle = i % 2 === 0 ? "rgba(30, 124, 116, 0.03)" : "rgba(194, 140, 51, 0.03)";
+                ctx.beginPath();
+                ctx.arc(x, y, 120 + (i % 5) * 18, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.strokeStyle = "rgba(23, 49, 41, 0.05)";
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= world.width; x += 80) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, world.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= world.height; y += 80) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(world.width, y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawGroup(group, index, progress) {
+            const local = Math.max(0, Math.min(1, (progress - index * 0.06) / 0.45));
+            const eased = 1 - Math.pow(1 - local, 3);
+            const offsetY = 16 * (1 - eased);
+            ctx.save();
+            ctx.globalAlpha = 0.15 + eased * 0.85;
+            ctx.translate(0, offsetY);
+            drawRoundedRect(group.x, group.y, group.w, group.h, 28, rgba(group.color, 0.11), rgba(group.color, 0.33), 1.4);
+            drawRoundedRect(group.x + 18, group.y + 16, 150, 34, 17, rgba(group.color, 0.18), rgba(group.color, 0.3), 1);
+            ctx.fillStyle = rgba(group.color, 0.92);
+            ctx.font = '700 15px "Trebuchet MS", "Segoe UI", sans-serif';
+            ctx.textBaseline = "middle";
+            ctx.fillText(group.title, group.x + 34, group.y + 33);
+            ctx.restore();
+        }
+
+        function drawNode(node, progress) {
+            const index = nodes.indexOf(node);
+            const local = Math.max(0, Math.min(1, (progress - index * 0.018) / 0.35));
+            const eased = 1 - Math.pow(1 - local, 4);
+            const color = node.group ? groupMap[node.group].color : palette.user;
+            ctx.save();
+            ctx.globalAlpha = 0.08 + eased * 0.92;
+            ctx.translate(0, 12 * (1 - eased));
+            drawRoundedRect(node.x, node.y, node.w, node.h, 18, "rgba(255, 252, 247, 0.96)", "rgba(23, 49, 41, 0.08)", 1);
+            drawRoundedRect(node.x, node.y, node.w, 10, 18, rgba(color, 0.9), null, 0);
+
+            if (node.featured) {
+                drawRoundedRect(node.x + node.w - 52, node.y + 12, 34, 18, 9, rgba(color, 0.12), rgba(color, 0.28), 1);
+                ctx.fillStyle = rgba(color, 0.9);
+                ctx.font = '700 9px "Trebuchet MS", "Segoe UI", sans-serif';
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("CORE", node.x + node.w - 35, node.y + 21);
+                ctx.textAlign = "left";
+            }
+
+            const titleSize = node.lines.length > 2 ? 13 : 15;
+            const lineGap = 16;
+            const totalTextHeight = titleSize + (node.lines.length - 1) * lineGap;
+            let textY = node.y + (node.h - totalTextHeight) / 2 + 4;
+            ctx.fillStyle = palette.ink;
+            ctx.textBaseline = "middle";
+            ctx.font = `700 ${titleSize}px "Trebuchet MS", "Segoe UI", sans-serif`;
+            ctx.fillText(node.lines[0], node.x + 16, textY);
+            ctx.font = '600 12px "Trebuchet MS", "Segoe UI", sans-serif';
+            ctx.fillStyle = palette.muted;
+            for (let i = 1; i < node.lines.length; i += 1) {
+                textY += lineGap;
+                ctx.fillText(node.lines[i], node.x + 16, textY);
+            }
+            ctx.restore();
+        }
+
+        function getAnchor(node, side) {
+            switch (side) {
+                case "top":
+                    return { x: node.x + node.w / 2, y: node.y };
+                case "right":
+                    return { x: node.x + node.w, y: node.y + node.h / 2 };
+                case "bottom":
+                    return { x: node.x + node.w / 2, y: node.y + node.h };
+                default:
+                    return { x: node.x, y: node.y + node.h / 2 };
+            }
+        }
+
+        function chooseSide(fromNode, toNode) {
+            const dx = (toNode.x + toNode.w / 2) - (fromNode.x + fromNode.w / 2);
+            const dy = (toNode.y + toNode.h / 2) - (fromNode.y + fromNode.h / 2);
+            if (Math.abs(dx) > Math.abs(dy)) {
+                return dx >= 0 ? ["right", "left"] : ["left", "right"];
+            }
+            return dy >= 0 ? ["bottom", "top"] : ["top", "bottom"];
+        }
+
+        function buildEdgePath(edge) {
+            const fromNode = nodeMap[edge.from];
+            const toNode = nodeMap[edge.to];
+            const autoSides = chooseSide(fromNode, toNode);
+            const fromSide = edge.fromSide || autoSides[0];
+            const toSide = edge.toSide || autoSides[1];
+            const start = getAnchor(fromNode, fromSide);
+            const end = getAnchor(toNode, toSide);
+            const horizontal = fromSide === "left" || fromSide === "right";
+            if (horizontal) {
+                const midX = edge.midX !== undefined ? edge.midX : (start.x + end.x) / 2;
+                return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+            }
+            const midY = edge.midY !== undefined ? edge.midY : (start.y + end.y) / 2;
+            return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
+        }
+
+        function drawArrowHead(end, previous, color) {
+            const angle = Math.atan2(end.y - previous.y, end.x - previous.x);
+            const size = 9;
+            ctx.save();
+            ctx.translate(end.x, end.y);
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(-size, -size * 0.55);
+            ctx.lineTo(-size, size * 0.55);
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawEdge(edge, time) {
+            const path = buildEdgePath(edge);
+            const dashOffset = -((time / 24) % 80);
+            const color = edge.dashed ? palette.dashed : palette.edge;
+            const glow = edge.dashed ? "rgba(180, 89, 63, 0.16)" : "rgba(30, 124, 116, 0.14)";
+            ctx.save();
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+
+            ctx.beginPath();
+            path.forEach((point, index) => {
+                if (index === 0) {
+                    ctx.moveTo(point.x, point.y);
+                } else {
+                    ctx.lineTo(point.x, point.y);
+                }
+            });
+            ctx.strokeStyle = glow;
+            ctx.lineWidth = edge.dashed ? 5 : 6;
+            ctx.globalAlpha = 0.35;
+            ctx.stroke();
+
+            ctx.beginPath();
+            path.forEach((point, index) => {
+                if (index === 0) {
+                    ctx.moveTo(point.x, point.y);
+                } else {
+                    ctx.lineTo(point.x, point.y);
+                }
+            });
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = edge.dashed ? 1.7 : 2;
+            ctx.strokeStyle = color;
+            ctx.setLineDash(edge.dashed ? [10, 8] : [12, 12]);
+            ctx.lineDashOffset = edge.dashed ? dashOffset : dashOffset * 0.4;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            drawArrowHead(path[path.length - 1], path[path.length - 2], color);
+            ctx.restore();
+        }
+
+        function drawWorldLabel() {
+            ctx.save();
+            ctx.fillStyle = "rgba(23, 49, 41, 0.06)";
+            ctx.font = '700 82px Georgia, "Times New Roman", serif';
+            ctx.textAlign = "right";
+            ctx.fillText("PHONE ASSISTANT", world.width - 62, world.height - 86);
+            ctx.restore();
+        }
+
+        function render(time = performance.now()) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.setTransform(
+                devicePixelRatioValue * view.scale,
+                0,
+                0,
+                devicePixelRatioValue * view.scale,
+                devicePixelRatioValue * view.x,
+                devicePixelRatioValue * view.y
+            );
+            const progress = Math.min(1, (time - animationStartedAt) / 1400);
+            drawBackdrop();
+            drawWorldLabel();
+            groups.forEach((group, index) => drawGroup(group, index, progress));
+            edges.forEach((edge) => drawEdge(edge, time));
+            nodes.forEach((node) => drawNode(node, progress));
+        }
+
+        function animate(time) {
+            render(time);
+            window.requestAnimationFrame(animate);
+        }
+
+        canvas.addEventListener("pointerdown", (event) => {
+            dragging = true;
+            lastPointer = { x: event.clientX, y: event.clientY };
+            canvas.classList.add("dragging");
+            canvas.setPointerCapture(event.pointerId);
+        });
+
+        canvas.addEventListener("pointermove", (event) => {
+            if (!dragging) {
+                return;
+            }
+            view.x += event.clientX - lastPointer.x;
+            view.y += event.clientY - lastPointer.y;
+            lastPointer = { x: event.clientX, y: event.clientY };
+            render();
+        });
+
+        function stopDragging(event) {
+            if (event && canvas.hasPointerCapture(event.pointerId)) {
+                canvas.releasePointerCapture(event.pointerId);
+            }
+            dragging = false;
+            canvas.classList.remove("dragging");
+        }
+
+        canvas.addEventListener("pointerup", stopDragging);
+        canvas.addEventListener("pointercancel", stopDragging);
+
+        canvas.addEventListener("wheel", (event) => {
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            const worldX = (mouseX - view.x) / view.scale;
+            const worldY = (mouseY - view.y) / view.scale;
+            const zoomFactor = Math.exp(-event.deltaY * 0.0012);
+            const nextScale = Math.min(1.9, Math.max(0.28, view.scale * zoomFactor));
+            view.x = mouseX - worldX * nextScale;
+            view.y = mouseY - worldY * nextScale;
+            view.scale = nextScale;
+            updateZoomLabel();
+            render();
+        }, { passive: false });
+
+        fitButton.addEventListener("click", fitToView);
+        resetButton.addEventListener("click", resetZoom);
+        exportButton.addEventListener("click", () => {
+            const link = document.createElement("a");
+            link.href = canvas.toDataURL("image/png");
+            link.download = "phone-assistant-architecture.png";
+            link.click();
+        });
+
+        window.addEventListener("resize", resizeCanvas);
+        window.addEventListener("keydown", (event) => {
+            if (event.key === "0") {
+                fitToView();
+            }
+            if (event.key === "1") {
+                resetZoom();
+            }
+        });
+
+        resizeCanvas();
+        fitToView();
+        updateZoomLabel();
+        window.requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
