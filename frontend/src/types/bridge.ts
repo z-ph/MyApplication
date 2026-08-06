@@ -154,3 +154,116 @@ export interface LingxiAgentPlugin {
   ): Promise<PluginListenerHandle>;
   removeAllListeners?(): Promise<void>;
 }
+
+// —— ApiConfig §2.4 / LingxiApiConfig §3.3 ——
+
+export interface ApiConfigDto {
+  id: string;
+  name: string;
+  /** Bridge uppercase enum style: OPENAI, ZHIPU, … */
+  provider: string;
+  apiKeyMasked: string;
+  baseUrl: string;
+  modelId: string;
+  isActive: boolean;
+}
+
+export interface ConfigsEnvelope {
+  configs: ApiConfigDto[];
+}
+
+export interface ConfigEnvelope {
+  config: ApiConfigDto;
+}
+
+export interface CreateApiConfigOptions {
+  name?: string;
+  provider: string;
+  apiKey: string;
+  baseUrl?: string;
+  modelId?: string;
+}
+
+export interface UpdateApiConfigOptions {
+  id: string;
+  name?: string;
+  provider: string;
+  /** Omit or blank to keep existing key */
+  apiKey?: string;
+  baseUrl?: string;
+  modelId?: string;
+}
+
+export interface ModelsEnvelope {
+  models: string[];
+}
+
+export interface TestConnectionResult {
+  success: boolean;
+  message: string;
+  details?: string | null;
+}
+
+export interface ProviderInfo {
+  id: string;
+  displayName: string;
+  defaultBaseUrl: string;
+  defaultModel: string;
+}
+
+export interface ProvidersEnvelope {
+  providers: ProviderInfo[];
+}
+
+export interface LingxiApiConfigPlugin {
+  list(): Promise<ConfigsEnvelope>;
+  create(options: CreateApiConfigOptions): Promise<ConfigEnvelope>;
+  update(options: UpdateApiConfigOptions): Promise<ConfigEnvelope>;
+  delete(options: { id: string }): Promise<void>;
+  setActive(options: { id: string }): Promise<void>;
+  fetchModels(options: {
+    provider: string;
+    apiKey?: string;
+    baseUrl?: string;
+  }): Promise<ModelsEnvelope>;
+  testConnection(options: {
+    provider: string;
+    apiKey?: string;
+    baseUrl?: string;
+    modelId?: string;
+  }): Promise<TestConnectionResult>;
+  listProviders?(): Promise<ProvidersEnvelope>;
+  addListener(
+    eventName: 'configsChanged',
+    listener: (data: ConfigsEnvelope) => void,
+  ): Promise<PluginListenerHandle>;
+  removeAllListeners?(): Promise<void>;
+}
+
+// —— Permission §3.4 ——
+
+export interface PermissionStatusDto {
+  accessibility: boolean;
+  overlay: boolean;
+  screenCapture: boolean;
+  appList: boolean;
+  notification: boolean;
+  apiConfigured: boolean;
+  shizuku: boolean;
+  /** accessibility && overlay && screenCapture && appList && apiConfigured */
+  allReady: boolean;
+}
+
+export interface LingxiPermissionPlugin {
+  getStatus(): Promise<PermissionStatusDto>;
+  openAccessibilitySettings(): Promise<void>;
+  requestOverlay(): Promise<void>;
+  /** MediaProjection via Activity Result; resolves updated status or rejects */
+  requestScreenCapture(): Promise<PermissionStatusDto>;
+  refresh(): Promise<PermissionStatusDto>;
+  addListener(
+    eventName: 'statusChanged',
+    listener: (data: PermissionStatusDto) => void,
+  ): Promise<PluginListenerHandle>;
+  removeAllListeners?(): Promise<void>;
+}
