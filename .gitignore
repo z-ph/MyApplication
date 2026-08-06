@@ -121,3 +121,14 @@ cmdline-tools/
 # Git worktrees
 .worktrees/
 .claude
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# Capacitor synced web assets (regenerate via `cd frontend && npm run build:sync`)
+# Keep capacitor.config.json / capacitor.plugins.json templates out of git if desired;
+# public bundle is large — regenerate on build. Commit a minimal placeholder so
+# offline assemble works after clone+sync.
+app/src/main/assets/public/

@@ -59,6 +59,14 @@ dependencies {
     // Material Icons Extended
     implementation(libs.androidx.compose.material.icons.extended)
 
+    // Capacitor (H5 host) — library project from frontend/node_modules
+    implementation(project(":capacitor-android"))
+    // BridgeActivity extends AppCompatActivity
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("androidx.coordinatorlayout:coordinatorlayout:1.3.0")
+    implementation("androidx.webkit:webkit:1.14.0")
+
+
     // Ktor HTTP Client (for custom HTTP code and LangChain4j)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.android)

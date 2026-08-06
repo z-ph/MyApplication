@@ -372,10 +372,26 @@ TypeScript 包装路径约定：`frontend/src/plugins/*.ts`。
 
 | 方法 | 说明 |
 |------|------|
-| `getVersion` | 应用版本等信息 |
-| `openUrl` | 打开外部 URL |
+| `echo` | 探活：入参 `{ value: string }`，回 `{ value: string }`（原样返回） |
+| `getVersion` | 应用版本等信息 → `{ appName, packageName, versionName, versionCode, mock? }` |
+| `openUrl` | 打开外部 URL → 入参 `{ url: string }` |
 
-无事件。Phase 1 可另加探活方法（如 `echo`），属实现增量，稳定后回写本文。
+无事件。
+
+```typescript
+// frontend/src/plugins/lingxi-app.ts
+export interface LingxiAppPlugin {
+  echo(options: { value: string }): Promise<{ value: string }>;
+  getVersion(): Promise<{
+    appName: string;
+    packageName: string;
+    versionName: string;
+    versionCode: number;
+    mock?: boolean;
+  }>;
+  openUrl(options: { url: string }): Promise<void>;
+}
+```
 
 ### 3.8 TypeScript 包装示意（Chat）
 

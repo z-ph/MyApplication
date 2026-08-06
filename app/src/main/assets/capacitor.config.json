@@ -1,0 +1,11 @@
+{
+  "appId": "com.example.myapplication",
+  "appName": "灵犀",
+  "webDir": "public",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
