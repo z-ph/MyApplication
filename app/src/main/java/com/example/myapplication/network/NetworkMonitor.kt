@@ -1,8 +1,8 @@
 package com.example.myapplication.network
 
-import androidx.compose.runtime.mutableStateListOf
 import com.example.myapplication.utils.Logger
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 private const val TAG = "NetworkMonitor"
 
@@ -25,7 +25,7 @@ class NetworkMonitor private constructor() {
     }
 
     private val logger = Logger(TAG)
-    private val _requests = mutableStateListOf<NetworkRequest>()
+    private val _requests = CopyOnWriteArrayList<NetworkRequest>()
     private val requestMap = ConcurrentHashMap<String, NetworkRequest>()
 
     val requests: List<NetworkRequest> get() = _requests.toList()
@@ -35,7 +35,7 @@ class NetworkMonitor private constructor() {
         _requests.add(0, request)
 
         // Keep only last 100 requests to avoid memory issues
-        if (_requests.size > 100) {
+        while (_requests.size > 100) {
             val removed = _requests.removeAt(_requests.size - 1)
             requestMap.remove(removed.id)
         }

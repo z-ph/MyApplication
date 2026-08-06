@@ -31,8 +31,8 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
- * UI-free chat façade extracted from ChatViewModel.
- * Used by LingxiChatPlugin; Compose ViewModel may later delegate here.
+ * UI-free chat façade for LingxiChatPlugin.
+ * Owns FloatingWindowService.onStopButtonClick (single owner after Compose removal).
  *
  * Contract: docs/bridge-api.md §3.1 LingxiChat
  */
