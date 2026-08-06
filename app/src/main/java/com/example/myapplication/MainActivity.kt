@@ -1,7 +1,9 @@
 package com.example.myapplication
 
 import android.os.Bundle
+import com.example.myapplication.plugins.LingxiAgentPlugin
 import com.example.myapplication.plugins.LingxiAppPlugin
+import com.example.myapplication.plugins.LingxiChatPlugin
 import com.getcapacitor.BridgeActivity
 
 /**
@@ -14,6 +16,8 @@ class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must register before super.onCreate so Bridge.Builder picks them up.
         registerPlugin(LingxiAppPlugin::class.java)
+        registerPlugin(LingxiChatPlugin::class.java)
+        registerPlugin(LingxiAgentPlugin::class.java)
         super.onCreate(savedInstanceState)
     }
 }
