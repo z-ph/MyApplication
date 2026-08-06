@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Phone Assistant</string>
-    <string name="accessibility_service_description">AI Automation Assistant - Helps automate tasks on your device using AI. This service can perform clicks, swipes, and text input based on AI analysis.</string>
+    <string name="app_name">灵犀</string>
+    <string name="accessibility_service_description">灵犀 — AI 手机助手。根据对话理解意图，代为点击、滑动与输入，协助完成设备上的自动化任务。</string>
 </resources>
