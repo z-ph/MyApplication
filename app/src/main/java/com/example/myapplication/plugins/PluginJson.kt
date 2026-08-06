@@ -1,8 +1,11 @@
 package com.example.myapplication.plugins
 
 import com.example.myapplication.data.dto.AgentStateDto
+import com.example.myapplication.data.dto.ApiConfigDto
 import com.example.myapplication.data.dto.ChatMessageDto
 import com.example.myapplication.data.dto.ChatSessionDto
+import com.example.myapplication.data.dto.PermissionStatusDto
+import com.example.myapplication.data.dto.TestConnectionDto
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import org.json.JSONObject
@@ -84,6 +87,64 @@ object PluginJson {
         putNullable("result", agentState.result)
         putNullable("error", agentState.error)
         putNullable("message", message)
+    }
+
+    fun apiConfig(dto: ApiConfigDto): JSObject = JSObject().apply {
+        put("id", dto.id)
+        put("name", dto.name)
+        put("provider", dto.provider)
+        put("apiKeyMasked", dto.apiKeyMasked)
+        put("baseUrl", dto.baseUrl)
+        put("modelId", dto.modelId)
+        put("isActive", dto.isActive)
+    }
+
+    fun configsEnvelope(configs: List<ApiConfigDto>): JSObject = JSObject().apply {
+        put("configs", JSArray().also { arr ->
+            configs.forEach { arr.put(apiConfig(it)) }
+        })
+    }
+
+    fun configEnvelope(dto: ApiConfigDto): JSObject = JSObject().apply {
+        put("config", apiConfig(dto))
+    }
+
+    fun modelsEnvelope(models: List<String>): JSObject = JSObject().apply {
+        put("models", JSArray().also { arr ->
+            models.forEach { arr.put(it) }
+        })
+    }
+
+    fun testConnection(dto: TestConnectionDto): JSObject = JSObject().apply {
+        put("success", dto.success)
+        put("message", dto.message)
+        putNullable("details", dto.details)
+    }
+
+    fun providersEnvelope(providers: List<Map<String, String>>): JSObject = JSObject().apply {
+        put(
+            "providers",
+            JSArray().also { arr ->
+                providers.forEach { p ->
+                    arr.put(
+                        JSObject().apply {
+                            p.forEach { (k, v) -> put(k, v) }
+                        },
+                    )
+                }
+            },
+        )
+    }
+
+    fun permissionStatus(dto: PermissionStatusDto): JSObject = JSObject().apply {
+        put("accessibility", dto.accessibility)
+        put("overlay", dto.overlay)
+        put("screenCapture", dto.screenCapture)
+        put("appList", dto.appList)
+        put("notification", dto.notification)
+        put("apiConfigured", dto.apiConfigured)
+        put("shizuku", dto.shizuku)
+        put("allReady", dto.allReady)
     }
 
     private fun JSObject.putNullable(key: String, value: Any?) {

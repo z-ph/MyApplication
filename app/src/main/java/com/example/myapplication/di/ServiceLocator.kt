@@ -5,7 +5,9 @@ import com.example.myapplication.MyApplication
 import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.api.ModelFetcher
 import com.example.myapplication.bridge.AgentFacade
+import com.example.myapplication.bridge.ApiConfigFacade
 import com.example.myapplication.bridge.ChatFacade
+import com.example.myapplication.bridge.PermissionFacade
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.preferences.AppPreferences
 import com.example.myapplication.data.repository.ApiConfigRepository
@@ -40,6 +42,12 @@ object ServiceLocator {
 
     @Volatile
     private var agentFacade: AgentFacade? = null
+
+    @Volatile
+    private var apiConfigFacade: ApiConfigFacade? = null
+
+    @Volatile
+    private var permissionFacade: PermissionFacade? = null
 
     /**
      * Initialize the service locator with application context
@@ -140,6 +148,39 @@ object ServiceLocator {
     }
 
     /**
+     * API config façade singleton (CRUD + reconfigure).
+     */
+    fun getApiConfigFacade(context: Context): ApiConfigFacade {
+        apiConfigFacade?.let { return it }
+        synchronized(this) {
+            apiConfigFacade?.let { return it }
+            init(context)
+            val appCtx = context.applicationContext
+            return ApiConfigFacade(
+                repository = getApiConfigRepository(),
+                modelFetcher = getModelFetcher(),
+                agent = getAgentEngine(appCtx),
+            ).also { apiConfigFacade = it }
+        }
+    }
+
+    /**
+     * Permission façade singleton.
+     */
+    fun getPermissionFacade(context: Context): PermissionFacade {
+        permissionFacade?.let { return it }
+        synchronized(this) {
+            permissionFacade?.let { return it }
+            init(context)
+            val appCtx = context.applicationContext
+            return PermissionFacade(
+                appContext = appCtx,
+                apiConfigRepository = getApiConfigRepository(),
+            ).also { permissionFacade = it }
+        }
+    }
+
+    /**
      * Reset all instances (for testing purposes only)
      */
     fun reset() {
@@ -148,6 +189,8 @@ object ServiceLocator {
             chatFacade?.dispose()
             chatFacade = null
             agentFacade = null
+            apiConfigFacade = null
+            permissionFacade = null
             database = null
             chatRepository = null
             apiConfigRepository = null

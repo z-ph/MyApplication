@@ -42,3 +42,42 @@ data class AgentStateDto(
     val result: String? = null,
     val error: String? = null,
 )
+
+/**
+ * API config for LingxiApiConfig.list / create / update / configsChanged.
+ * List responses use [apiKeyMasked] only — never full key.
+ * provider: bridge uppercase enum style (OPENAI, ZHIPU, …).
+ */
+data class ApiConfigDto(
+    val id: String,
+    val name: String,
+    val provider: String,
+    val apiKeyMasked: String,
+    val baseUrl: String,
+    val modelId: String,
+    val isActive: Boolean,
+)
+
+/**
+ * Permission status for LingxiPermission.getStatus / refresh / statusChanged.
+ * allReady = required system gates + active API config present.
+ */
+data class PermissionStatusDto(
+    val accessibility: Boolean,
+    val overlay: Boolean,
+    val screenCapture: Boolean,
+    val appList: Boolean,
+    val notification: Boolean,
+    val apiConfigured: Boolean,
+    val shizuku: Boolean,
+    val allReady: Boolean,
+)
+
+/**
+ * Result of LingxiApiConfig.testConnection.
+ */
+data class TestConnectionDto(
+    val success: Boolean,
+    val message: String,
+    val details: String? = null,
+)

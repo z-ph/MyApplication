@@ -231,7 +231,8 @@ FloatingWindowService（跨应用悬浮层，不在主 UI 导航内）
 
 未知 `providerId`：实现侧应拒绝或回落策略与 `ModelProvider.fromId` 一致，并在插件错误信息中可诊断；**勿**静默写成错误枚举而不回写文档。
 
-**写配置：** `create` / `update` 请求体中 H5 传完整 `apiKey`（及必要字段）；原生写入 Room / 安全存储后，响应与 list 仅返回 `apiKeyMasked`。
+**写配置：** `create` / `update` 请求体中 H5 传完整 `apiKey`（及必要字段）；原生写入 Room / 安全存储后，响应与 list 仅返回 `apiKeyMasked`。  
+**update：** `apiKey` 可省略或传空串，表示保留原密钥。
 
 写请求补充字段（与 list DTO 区分，实现时以插件方法参数为准）：
 
@@ -246,7 +247,51 @@ FloatingWindowService（跨应用悬浮层，不在主 UI 导航内）
 }
 ```
 
-### 2.5 响应信封（冻结）
+### 2.5 TestConnectionDto
+
+```json
+{
+  "success": true,
+  "message": "连接成功！获取到 N 个模型",
+  "details": "Models: …"
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `success` | boolean | 是否测连成功 |
+| `message` | string | 用户可读摘要 |
+| `details` | string \| null | 可选细节（模型名列表等） |
+
+### 2.6 PermissionStatusDto
+
+`LingxiPermission.getStatus` / `refresh` / `statusChanged` / `requestScreenCapture`（成功时）返回的**裸对象**：
+
+```json
+{
+  "accessibility": true,
+  "overlay": true,
+  "screenCapture": false,
+  "appList": true,
+  "notification": true,
+  "apiConfigured": false,
+  "shizuku": false,
+  "allReady": false
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `accessibility` | boolean | 无障碍服务已连接 |
+| `overlay` | boolean | `SYSTEM_ALERT_WINDOW` |
+| `screenCapture` | boolean | MediaProjection / 截屏服务运行中 |
+| `appList` | boolean | 可查询已安装应用意图 |
+| `notification` | boolean | 通知权限（API 33+；更低版本恒 true） |
+| `apiConfigured` | boolean | Room 存在活跃 API 配置 |
+| `shizuku` | boolean | Shizuku 就绪（可选，不计入 allReady） |
+| `allReady` | boolean | `accessibility && overlay && screenCapture && appList && apiConfigured` |
+
+### 2.7 响应信封（冻结）
 
 **规则（已钉死，实现不得二选一）：**
 
@@ -262,7 +307,7 @@ FloatingWindowService（跨应用悬浮层，不在主 UI 导航内）
 | 配置列表 | `{ "configs": ApiConfigDto[] }` | 裸 `ApiConfigDto[]` |
 | 日志列表 | `{ "logs": LogEntryDto[] }` | 裸数组（`LogEntryDto` 字段实现时回写 §2） |
 | Agent 状态（`getState` / `stateChanged`） | **裸** `AgentStateDto` | `{ "state": AgentStateDto }` 双层包装 |
-| 权限状态 | 见 `LingxiPermission.getStatus`（字段在实现插件时补充并回写本文） | — |
+| 权限状态 | 裸 `PermissionStatusDto`（见 §2.6 / §3.4） | — |
 | 版本 | `{ "version": string, ... }` | — |
 
 **事件与 list 对齐（冻结）：**
@@ -339,15 +384,16 @@ TypeScript 包装路径约定：`frontend/src/plugins/*.ts`。
 
 ### 3.3 `LingxiApiConfig`
 
-| 方法 | 示意返回（冻结） | 说明 |
-|------|------------------|------|
-| `list` | `{ configs: ApiConfigDto[] }` | **禁止裸数组**；含 `apiKeyMasked`，无明文 key |
-| `create` | `{ config: ApiConfigDto }`（建议） | 新建（请求含完整 `apiKey`） |
-| `update` | `{ config: ApiConfigDto }`（建议） | 更新（可含完整 `apiKey`） |
-| `delete` | `void` | 删除 |
-| `setActive` | `void` | 设为活跃配置并触发 reconfigure |
-| `fetchModels` | 实现时回写（建议 `{ models: string[] }`） | 拉取可用模型列表 |
-| `testConnection` | 实现时回写 | 测连 |
+| 方法 | 示意参数 | 示意返回（冻结） | 说明 |
+|------|----------|------------------|------|
+| `list` | — | `{ configs: ApiConfigDto[] }` | **禁止裸数组**；含 `apiKeyMasked`，无明文 key |
+| `create` | 写字段见 §2.4 | `{ config: ApiConfigDto }` | 新建（完整 `apiKey`）；首条自动 active 并 reconfigure |
+| `update` | 写字段 + `id`；`apiKey` 可空保留原密钥 | `{ config: ApiConfigDto }` | 更新；active 变更后 reconfigure |
+| `delete` | `{ id: string }` | `void` | 删除 |
+| `setActive` | `{ id: string }` | `void` | 设为活跃并 **reconfigure** Agent |
+| `fetchModels` | `{ provider, apiKey?, baseUrl? }` | `{ models: string[] }` | 拉取可用模型 id 列表 |
+| `testConnection` | `{ provider, apiKey?, baseUrl?, modelId? }` | `TestConnectionDto`（§2.5） | 测连（实现为 fetchModels 探测） |
+| `listProviders` | — | `{ providers: { id, displayName, defaultBaseUrl, defaultModel }[] }` | 可选；H5 Selector 默认值 |
 
 | 事件 | 载荷（冻结） | 说明 |
 |------|--------------|------|
@@ -355,19 +401,19 @@ TypeScript 包装路径约定：`frontend/src/plugins/*.ts`。
 
 ### 3.4 `LingxiPermission`
 
-| 方法 | 说明 |
-|------|------|
-| `getStatus` | 查询无障碍 / 悬浮窗 / 截屏 / 应用列表等状态 |
-| `openAccessibilitySettings` | 跳转系统无障碍设置 |
-| `requestOverlay` | 请求悬浮窗权限（跳转设置） |
-| `requestScreenCapture` | 请求 MediaProjection（经 Activity Result） |
-| `refresh` | 重新检测并推送 `statusChanged` |
+| 方法 | 示意返回（冻结） | 说明 |
+|------|------------------|------|
+| `getStatus` | 裸 `PermissionStatusDto`（§2.6） | 无障碍 / 悬浮窗 / 截屏 / 应用列表 / API 等 |
+| `openAccessibilitySettings` | `void` | 跳转系统无障碍设置 |
+| `requestOverlay` | `void` | 请求悬浮窗（跳转设置） |
+| `requestScreenCapture` | 成功时裸 `PermissionStatusDto`；拒绝 `reject` | MediaProjection 经 Activity Result |
+| `refresh` | 裸 `PermissionStatusDto` | 重新检测并推送 `statusChanged` |
 
-| 事件 | 说明 |
-|------|------|
-| `statusChanged` | 权限状态更新 |
+| 事件 | 载荷（冻结） | 说明 |
+|------|--------------|------|
+| `statusChanged` | 裸 `PermissionStatusDto` | 与 `getStatus` 同形 |
 
-**实现注记（计划 §3.5）：** `requestScreenCapture` 由 `MainActivity`（未来 `BridgeActivity`）持有 launcher；无障碍与悬浮窗仅能打开系统设置，用户返回后 H5 在路由进入 / `App.resume` 时调用 `refresh`。
+**实现注记（计划 §3.5）：** `requestScreenCapture` 由 `MainActivity`（`BridgeActivity`）经 Capacitor `Plugin.startActivityForResult` + `@ActivityCallback` 持有 launcher；无障碍与悬浮窗仅能打开系统设置，用户返回后 H5 在路由进入 / `visibilitychange` / `focus` 时调用 `refresh`。
 
 ### 3.5 `LingxiLog`
 
