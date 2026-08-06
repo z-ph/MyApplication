@@ -182,7 +182,7 @@ FloatingWindowService（跨应用悬浮层，不在主 UI 导航内）
 | 桥接 `AgentStateDto` | 上表字段；**不含** `timestamp`（H5 不依赖；若日后需要再加可选字段并回写本文） |
 
 - 原生 **没有** `step` / `action` / `thinking`：Facade 映射时一律填 **`""`**，直至原生侧提供对应字段后再透传。
-- 原生 `AgentStateType` 已含 `CANCELLED`；H5 枚举**必须**包含 `CANCELLED`。当前 `cancel()` 实现将状态置为 `IDLE`（未写 `CANCELLED`）：桥接在取消路径上应向 H5 暴露 `CANCELLED`（或在原生 cancel 改为写入 `CANCELLED` 后原样透传），保证 H5 能区分「空闲」与「用户取消」。
+- 原生 `AgentStateType` 已含 `CANCELLED`；H5 枚举**必须**包含 `CANCELLED`。`LangChainAgentEngine.cancel()` **已写入 `CANCELLED`**（不再写 `IDLE`）。`AgentFacade` 仍保留 `forceCancelled` 兼容：若取消后引擎误报 `IDLE`，桥接仍向 H5 暴露 `CANCELLED`，保证能区分「空闲」与「用户取消」。
 - **`LingxiAgent.getState` 返回裸 `AgentStateDto` 对象**，禁止再包一层 `{ "state": AgentStateDto }`（避免与字段名 `state` 混淆）。`stateChanged` 事件载荷同为裸 `AgentStateDto`。
 
 ### 2.4 ApiConfigDto

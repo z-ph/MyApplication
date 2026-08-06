@@ -206,6 +206,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ sending: true, error: null });
     try {
       await LingxiChat.sendMessage({ content: trimmed });
+      // Kickoff returned. Events clear sending when leaving RUNNING; if agent never
+      // entered RUNNING (early reject) or already terminal, clear here so UI unsticks.
+      try {
+        // Brief yield so native job can transition to RUNNING on the happy path
+        await new Promise((r) => setTimeout(r, 150));
+        if (!get().sending) return;
+        const st = await LingxiAgent.getState();
+        if (st.state !== 'RUNNING') {
+          set({ sending: false, agentState: st });
+        }
+      } catch {
+        /* events / cancel may still clear */
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       set({ error: message, sending: false });
@@ -214,8 +227,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   cancelTask: async () => {
-    await LingxiChat.cancelTask();
-    set({ sending: false });
+    try {
+      await LingxiChat.cancelTask();
+    } finally {
+      set({ sending: false });
+    }
   },
 
   clearMessages: async () => {

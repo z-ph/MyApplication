@@ -116,13 +116,53 @@ class ChatFacadeLogicTest {
             f.cancelTask()
             assertThat(f.lastCancelRequested).isTrue()
             verify { agent.cancel() }
+            assertThat(agentState.value.state)
+                .isEqualTo(LangChainAgentEngine.AgentStateType.CANCELLED)
             advanceUntilIdle()
-            coVerify {
+            // Single cancel UX: StatusMessage only (no AiMessage from CANCELLED branch)
+            coVerify(exactly = 1) {
                 repository.addMessage(
                     "s1",
                     match { it is ChatMessage.StatusMessage },
                 )
             }
+            coVerify(exactly = 0) {
+                repository.addMessage(
+                    "s1",
+                    match { it is ChatMessage.AiMessage },
+                )
+            }
+        }
+
+    @Test
+    fun listSessions_awaitsColdStartInit_selectsLatest() =
+        runTest(UnconfinedTestDispatcher()) {
+            val latest = ChatSession("s-latest", "最近", 1, 1)
+            coEvery { repository.getLatestSession() } returns latest
+            every { repository.getAllSessions() } returns flowOf(listOf(latest))
+
+            val f = facade(backgroundScope)
+            f.ensureInitialized()
+            val list = f.listSessions()
+            assertThat(list).hasSize(1)
+            assertThat(list[0].id).isEqualTo("s-latest")
+            assertThat(f.currentSessionId.value).isEqualTo("s-latest")
+        }
+
+    @Test
+    fun listSessions_awaitsColdStartInit_createsWhenEmpty() =
+        runTest(UnconfinedTestDispatcher()) {
+            coEvery { repository.getLatestSession() } returns null
+            val created = ChatSession("s-new", "新会话", 1, 1)
+            coEvery { repository.createSession(any()) } returns created
+            every { repository.getAllSessions() } returns flowOf(listOf(created))
+
+            val f = facade(backgroundScope)
+            f.ensureInitialized()
+            val list = f.listSessions()
+            assertThat(list).hasSize(1)
+            assertThat(f.currentSessionId.value).isEqualTo("s-new")
+            coVerify { repository.createSession("新会话") }
         }
 
     @Test

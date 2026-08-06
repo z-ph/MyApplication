@@ -96,12 +96,17 @@ class LangChainAgentEngine(private val context: Context) {
 
     fun execute(task: String, callback: (AgentResult) -> Unit) {
         if (_state.value.state != AgentStateType.READY) {
-            callback(AgentResult.error("Agent 未就绪，请先初始化"))
+            // Emit terminal state so H5 taskProgress/stateChanged can clear sending
+            val msg = "Agent 未就绪，请先初始化"
+            _state.value = AgentState(state = AgentStateType.ERROR, error = msg)
+            callback(AgentResult.error(msg))
             return
         }
 
         val assistant = this.assistant ?: run {
-            callback(AgentResult.error("Agent 未初始化"))
+            val msg = "Agent 未初始化"
+            _state.value = AgentState(state = AgentStateType.ERROR, error = msg)
+            callback(AgentResult.error(msg))
             return
         }
 
@@ -118,10 +123,14 @@ class LangChainAgentEngine(private val context: Context) {
                     callback(AgentResult.success(summary))
                 }
                 result.startsWith("REPLY:") -> {
+                    // Must leave RUNNING so ChatFacade filter and H5 sending can complete
                     val reply = result.substringAfter("REPLY:").trim()
+                    _state.value = AgentState(state = AgentStateType.COMPLETED, result = reply)
                     callback(AgentResult.reply(reply))
                 }
                 else -> {
+                    // Treat bare model text as completed reply (never stay RUNNING)
+                    _state.value = AgentState(state = AgentStateType.COMPLETED, result = result)
                     callback(AgentResult.success(result))
                 }
             }

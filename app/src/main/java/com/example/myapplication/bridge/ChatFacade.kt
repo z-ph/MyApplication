@@ -63,6 +63,7 @@ class ChatFacade(
 
     private var currentTaskJob: Job? = null
     private var floatingWindowJob: Job? = null
+    private var initJob: Job? = null
     private var initialized = false
 
     /** Set when user cancels so H5 sees CANCELLED even if engine wrote IDLE. */
@@ -73,7 +74,7 @@ class ChatFacade(
     fun ensureInitialized() {
         if (initialized) return
         initialized = true
-        scope.launch {
+        initJob = scope.launch {
             val latest = repository.getLatestSession()
             if (latest != null) {
                 _currentSessionId.value = latest.id
@@ -82,6 +83,11 @@ class ChatFacade(
             }
         }
         setupFloatingWindowSync()
+    }
+
+    /** Wait for cold-start session create/select so listSessions is not empty. */
+    private suspend fun awaitInitialized() {
+        initJob?.join()
     }
 
     private fun setupFloatingWindowSync() {
@@ -97,6 +103,7 @@ class ChatFacade(
     }
 
     suspend fun listSessions(): List<ChatSessionDto> {
+        awaitInitialized()
         return repository.getAllSessions().first().toSessionDtos()
     }
 
@@ -200,6 +207,7 @@ class ChatFacade(
                     it.state != LangChainAgentEngine.AgentStateType.RUNNING
                 }.first()
 
+                // Skip CANCELLED here: cancelTask owns the single StatusMessage cancel UX.
                 val finalState = agent.state.value
                 when (finalState.state) {
                     LangChainAgentEngine.AgentStateType.COMPLETED -> {
@@ -225,23 +233,14 @@ class ChatFacade(
                             ),
                         )
                     }
-                    LangChainAgentEngine.AgentStateType.CANCELLED -> {
-                        repository.addMessage(
-                            sessionId,
-                            ChatMessage.AiMessage(
-                                id = UUID.randomUUID().toString(),
-                                timestamp = System.currentTimeMillis(),
-                                content = "⏹️ 任务已取消",
-                                isSuccess = true,
-                            ),
-                        )
-                    }
                     else -> {}
                 }
 
                 kotlinx.coroutines.delay(2000)
                 FloatingWindowService.getInstance()?.hide()
             } catch (e: kotlinx.coroutines.CancellationException) {
+                // Mirror success/error: always hide overlay on cancel path
+                FloatingWindowService.getInstance()?.hide()
                 throw e
             } catch (e: Exception) {
                 logger.e("Execution error: ${e.message}", e)
@@ -278,7 +277,10 @@ class ChatFacade(
         agent.cancel()
         currentTaskJob?.cancel()
         currentTaskJob = null
+        // Hide overlay immediately (do not wait for job CancellationException)
+        FloatingWindowService.getInstance()?.hide()
 
+        // Single cancel UX message (StatusMessage only; executeWithAgent skips CANCELLED AiMessage)
         val sessionId = _currentSessionId.value ?: return
         scope.launch {
             repository.addMessage(
