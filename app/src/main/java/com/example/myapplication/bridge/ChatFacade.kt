@@ -170,7 +170,17 @@ class ChatFacade(
     }
 
     private fun executeWithAgent(sessionId: String, instruction: String) {
-        currentTaskJob?.cancel()
+        // Supersede in-flight task: agent.cancel() (not only Job.cancel) so state is consistent
+        // and any late terminal branch from the previous job can be ignored cleanly.
+        if (currentTaskJob?.isActive == true ||
+            agent.state.value.state == LangChainAgentEngine.AgentStateType.RUNNING
+        ) {
+            logger.d("sendMessage supersedes previous task — agent.cancel()")
+            agent.cancel()
+            currentTaskJob?.cancel()
+            currentTaskJob = null
+        }
+
         currentTaskJob = scope.launch {
             FloatingWindowService.start(appContext)
             FloatingWindowService.getInstance()?.clearLog()
@@ -179,8 +189,11 @@ class ChatFacade(
             try {
                 ensureAgentReady()
 
+                // Callback delivers the user-visible reply; terminal-state branch only fills gaps.
+                val replyDelivered = java.util.concurrent.atomic.AtomicBoolean(false)
                 withContext(Dispatchers.IO) {
                     agent.execute(instruction) { result ->
+                        replyDelivered.set(true)
                         scope.launch {
                             val message = if (result.success) {
                                 ChatMessage.AiMessage(
@@ -207,33 +220,36 @@ class ChatFacade(
                     it.state != LangChainAgentEngine.AgentStateType.RUNNING
                 }.first()
 
-                // Skip CANCELLED here: cancelTask owns the single StatusMessage cancel UX.
-                val finalState = agent.state.value
-                when (finalState.state) {
-                    LangChainAgentEngine.AgentStateType.COMPLETED -> {
-                        repository.addMessage(
-                            sessionId,
-                            ChatMessage.AiMessage(
-                                id = UUID.randomUUID().toString(),
-                                timestamp = System.currentTimeMillis(),
-                                content = "✅ ${finalState.result ?: "完成"}",
-                                isSuccess = true,
-                            ),
-                        )
+                // Skip CANCELLED: cancelTask owns StatusMessage UX.
+                // Skip COMPLETED/ERROR when callback already wrote the reply (single final bubble).
+                if (!replyDelivered.get()) {
+                    val finalState = agent.state.value
+                    when (finalState.state) {
+                        LangChainAgentEngine.AgentStateType.COMPLETED -> {
+                            repository.addMessage(
+                                sessionId,
+                                ChatMessage.AiMessage(
+                                    id = UUID.randomUUID().toString(),
+                                    timestamp = System.currentTimeMillis(),
+                                    content = "✅ ${finalState.result ?: "完成"}",
+                                    isSuccess = true,
+                                ),
+                            )
+                        }
+                        LangChainAgentEngine.AgentStateType.ERROR -> {
+                            repository.addMessage(
+                                sessionId,
+                                ChatMessage.AiMessage(
+                                    id = UUID.randomUUID().toString(),
+                                    timestamp = System.currentTimeMillis(),
+                                    content = "❌ ${finalState.error ?: "未知错误"}",
+                                    isSuccess = false,
+                                    errorMessage = finalState.error,
+                                ),
+                            )
+                        }
+                        else -> {}
                     }
-                    LangChainAgentEngine.AgentStateType.ERROR -> {
-                        repository.addMessage(
-                            sessionId,
-                            ChatMessage.AiMessage(
-                                id = UUID.randomUUID().toString(),
-                                timestamp = System.currentTimeMillis(),
-                                content = "❌ ${finalState.error ?: "未知错误"}",
-                                isSuccess = false,
-                                errorMessage = finalState.error,
-                            ),
-                        )
-                    }
-                    else -> {}
                 }
 
                 kotlinx.coroutines.delay(2000)

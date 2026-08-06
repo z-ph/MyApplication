@@ -206,22 +206,9 @@ class ChatScreenPage(PageObject):
                 pass
         # Ensure chat controls exist (may need tab bar)
         if not self.is_testid_present("chat-input", timeout=5.0):
-            # Try open chat via body text / hash navigation
+            # Native Capacitor uses HashRouter only — do not touch pathname/pushState.
             try:
-                self.driver.execute_script(
-                    "window.location.hash = '#/tabs/chat';"
-                    "window.location.pathname = '/tabs/chat';"
-                )
-            except Exception:
-                pass
-            # React Router BrowserRouter — try history
-            try:
-                self.driver.execute_script(
-                    "if (window.history) {"
-                    "  window.history.pushState({}, '', '/tabs/chat');"
-                    "  window.dispatchEvent(new PopStateEvent('popstate'));"
-                    "}"
-                )
+                self.driver.execute_script("window.location.hash = '#/tabs/chat';")
             except Exception:
                 pass
             self.find_by_testid("chat-input", timeout=15.0)
@@ -281,14 +268,9 @@ class ApiConfigScreenPage(PageObject):
         if self.is_testid_present("settings-api-config", timeout=2.0):
             self.click_testid("settings-api-config")
             return
-        # Hash / history navigation fallback
+        # HashRouter-only fallback (native WebView; no pathname/pushState)
         try:
-            self.driver.execute_script(
-                "if (window.history) {"
-                "  window.history.pushState({}, '', '/api-config');"
-                "  window.dispatchEvent(new PopStateEvent('popstate'));"
-                "}"
-            )
+            self.driver.execute_script("window.location.hash = '#/api-config';")
         except Exception:
             pass
         self.find_by_testid("api-config-add", timeout=15.0)
