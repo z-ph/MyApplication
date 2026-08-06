@@ -1,114 +1,151 @@
-import { useEffect, useState } from 'react';
-import { NavBar, SpinLoading, Toast } from 'antd-mobile';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  isNativePlatform,
-  LingxiApp,
-} from '../plugins/lingxi-app';
-import type { AppVersionInfo } from '../types/bridge';
-
-type BridgeState =
-  | { kind: 'loading' }
-  | { kind: 'ready'; version: AppVersionInfo; echo: string }
-  | { kind: 'error'; message: string };
+  Dialog,
+  NavBar,
+  NoticeBar,
+  SpinLoading,
+  Tag,
+  Toast,
+} from 'antd-mobile';
+import { UnorderedListOutline, SetOutline } from 'antd-mobile-icons';
+import { MessageBubble } from '../components/chat/MessageBubble';
+import { ChatInputBar } from '../components/chat/ChatInputBar';
+import { SessionDrawer } from '../components/chat/SessionDrawer';
+import { useChatStore } from '../stores/useChatStore';
 
 /**
- * Phase 1 home: NavBar + version via LingxiApp; TabBar shell only.
- * Chat business (send / sessions) is Task 3+.
+ * Chat main path: sessions / messages / send / cancel via LingxiChat + LingxiAgent.
  */
 export function ChatPage() {
-  const [bridge, setBridge] = useState<BridgeState>({ kind: 'loading' });
+  const navigate = useNavigate();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const {
+    sessions,
+    currentSessionId,
+    messages,
+    agentState,
+    sending,
+    ready,
+    error,
+    init,
+    createSession,
+    selectSession,
+    deleteSession,
+    sendMessage,
+    cancelTask,
+  } = useChatStore();
 
   useEffect(() => {
-    let cancelled = false;
+    void init();
+  }, [init]);
 
-    async function probe() {
-      try {
-        const [version, echo] = await Promise.all([
-          LingxiApp.getVersion(),
-          LingxiApp.echo({ value: 'ok' }),
-        ]);
-        if (cancelled) return;
-        setBridge({ kind: 'ready', version, echo: echo.value });
-      } catch (e) {
-        if (cancelled) return;
-        const message = e instanceof Error ? e.message : String(e);
-        setBridge({ kind: 'error', message });
-        Toast.show({ icon: 'fail', content: `桥接失败: ${message}` });
-      }
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
     }
+  }, [messages]);
 
-    void probe();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const agentTag = agentState?.state ?? '—';
+  const isRunning = agentState?.state === 'RUNNING' || sending;
+
+  const onSend = async (content: string) => {
+    try {
+      await sendMessage(content);
+    } catch (e) {
+      Toast.show({
+        icon: 'fail',
+        content: e instanceof Error ? e.message : '发送失败',
+      });
+    }
+  };
+
+  const onCancel = async () => {
+    const ok = await Dialog.confirm({
+      content: '确定取消当前任务？',
+    });
+    if (ok) {
+      await cancelTask();
+    }
+  };
+
+  const currentTitle =
+    sessions.find((s) => s.id === currentSessionId)?.title ?? '灵犀';
 
   return (
-    <div className="app-shell" style={{ height: '100%' }}>
-      <NavBar back={null}>灵犀</NavBar>
-      <div className="page">
-        <div className="page__card">
-          <h1 className="page__title">Chat</h1>
-          <p className="page__meta">Phase 1 壳工程 — 聊天业务尚未接入。</p>
+    <div className="chat-page">
+      <NavBar
+        back={null}
+        left={
+          <UnorderedListOutline
+            fontSize={22}
+            onClick={() => setDrawerOpen(true)}
+            data-testid="session-menu"
+          />
+        }
+        right={
+          <SetOutline
+            fontSize={22}
+            onClick={() => navigate('/tabs/profile')}
+          />
+        }
+      >
+        <span className="chat-page__title">{currentTitle}</span>
+      </NavBar>
 
-          {bridge.kind === 'loading' && (
-            <div style={{ marginTop: 16 }}>
-              <SpinLoading color="primary" />
-            </div>
-          )}
+      {isRunning ? (
+        <NoticeBar
+          content={`Agent 运行中… ${agentState?.step || agentState?.action || ''}`}
+          color="info"
+          closeable={false}
+        />
+      ) : null}
 
-          {bridge.kind === 'error' && (
-            <div>
-              <span className="bridge-status bridge-status--err">
-                桥接错误
-              </span>
-              <p className="page__meta" style={{ marginTop: 8 }}>
-                {bridge.message}
-              </p>
-            </div>
-          )}
+      {error ? (
+        <NoticeBar content={error} color="alert" closeable />
+      ) : null}
 
-          {bridge.kind === 'ready' && (
-            <>
-              <p className="page__meta" style={{ marginTop: 12 }}>
-                <strong>应用：</strong>
-                {bridge.version.appName}
-              </p>
-              <p className="page__meta">
-                <strong>版本：</strong>
-                {bridge.version.versionName}
-                {bridge.version.versionCode > 0
-                  ? ` (${bridge.version.versionCode})`
-                  : ''}
-              </p>
-              <p className="page__meta">
-                <strong>包名：</strong>
-                {bridge.version.packageName}
-              </p>
-              <p className="page__meta">
-                <strong>echo：</strong>
-                {bridge.echo}
-              </p>
-              <span
-                className={
-                  bridge.version.mock || !isNativePlatform()
-                    ? 'bridge-status bridge-status--mock'
-                    : 'bridge-status bridge-status--ok'
-                }
-                data-testid="bridge-status"
-              >
-                {bridge.version.mock || !isNativePlatform()
-                  ? '浏览器 mock'
-                  : '原生桥接 OK'}
-              </span>
-            </>
-          )}
-
-          <p className="page__hint">
-            底栏：Chat / Logs / 我的。后续 Phase 接入权限门闸与 Agent。
-          </p>
-        </div>
+      <div className="chat-page__status">
+        <Tag color={isRunning ? 'primary' : 'default'} fill="outline">
+          {agentTag}
+        </Tag>
       </div>
+
+      <div className="chat-page__messages" ref={listRef} data-testid="msg-list">
+        {!ready ? (
+          <div className="chat-page__loading">
+            <SpinLoading color="primary" />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="chat-page__empty">
+            发送一条指令开始自动化任务
+          </div>
+        ) : (
+          messages.map((m) => <MessageBubble key={m.id} message={m} />)
+        )}
+      </div>
+
+      <ChatInputBar
+        sending={isRunning}
+        onSend={onSend}
+        onCancel={onCancel}
+      />
+
+      <SessionDrawer
+        visible={drawerOpen}
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        onClose={() => setDrawerOpen(false)}
+        onSelect={(id) => void selectSession(id)}
+        onDelete={(id) => void deleteSession(id)}
+        onCreate={() => {
+          void createSession();
+          setDrawerOpen(false);
+        }}
+      />
     </div>
   );
 }
