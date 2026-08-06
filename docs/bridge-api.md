@@ -419,20 +419,37 @@ TypeScript 包装路径约定：`frontend/src/plugins/*.ts`。
 
 | 方法 | 示意返回（冻结） | 说明 |
 |------|------------------|------|
-| `list` | `{ logs: LogEntryDto[] }` | **禁止裸数组**；`LogEntryDto` 字段实现时回写 §2 |
-| `clear` | `void` | 清空 |
-| `export` | 实现时回写（路径 / 文本） | 导出 |
+| `list` | `{ logs: LogEntryDto[] }` | **禁止裸数组**；见下方 `LogEntryDto` |
+| `clear` | `void` | 清空内存缓冲 |
+| `export` | `{ text: string }` | 纯文本导出（供剪贴板） |
 
 | 事件 | 载荷（冻结） | 说明 |
 |------|--------------|------|
-| `logAppended` | `{ logs: LogEntryDto[] }` | 与 list 同键名；单条用单元素数组 |
+| `logAppended` | `{ logs: LogEntryDto[] }` | 与 list 同键名；实现可推送**全量**缓冲（H5 直接替换） |
+
+**`LogEntryDto`（§2 补全）：**
+
+```json
+{
+  "id": "…",
+  "timestamp": "HH:mm:ss.SSS",
+  "tag": "LoggerTag",
+  "level": "ERROR | WARN | INFO | DEBUG | VERBOSE",
+  "message": "…",
+  "throwable": null
+}
+```
 
 ### 3.6 `LingxiShell`（调试）
 
-| 方法 | 说明 |
-|------|------|
-| `runCommand` | 执行 shell 命令 |
-| `listPackages` | 包列表 |
+| 方法 | 示意参数 | 示意返回 | 说明 |
+|------|----------|----------|------|
+| `getShizukuStatus` | — | `{ ready, available, status }` | `status`: `ready` \| `available` \| `unavailable` |
+| `runCommand` | `{ command: string }` | `{ success, output, error?, exitCode? }` | Shizuku 优先，否则 `sh -c` 回落 |
+| `listPackages` | `{ includeSystem?, limit? }` | `{ packages: { packageName, label, isSystem?, hasLaunchIntent? }[] }` | 应用列表 |
+| `launchApp` | `{ nameOrPackage }` 或 `{ name }` | 同 `runCommand` 结果形 | 按名/包名启动 |
+| `inputText` | `{ text: string }` | 同命令结果形 | 直接 `AutoService.inputText`（Type 工具测试） |
+| `runPackageTests` | — | `{ results: { name, success, message, durationMs }[] }` | 包名映射等调试套件 |
 
 无事件。
 

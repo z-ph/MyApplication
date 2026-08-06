@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { List, NavBar, Tag, Toast } from 'antd-mobile';
+import { List, NavBar, Tag } from 'antd-mobile';
 import type { AgentStateDto, AppVersionInfo } from '../types/bridge';
 import { LingxiAgent } from '../plugins/lingxi-agent';
 import { LingxiApp } from '../plugins/lingxi-app';
@@ -93,22 +93,30 @@ export function ProfilePage() {
           </List.Item>
         </List>
 
-        <List header="调试（后续 Phase）" mode="card" style={{ marginTop: 12 }}>
+        <List header="调试" mode="card" style={{ marginTop: 12 }}>
           <List.Item
-            onClick={() =>
-              Toast.show({ content: 'API 测试页将在 Task 5 落地' })
-            }
+            onClick={() => navigate('/api-test')}
             arrow
+            data-testid="menu-api-test"
+            description="Agent 提示词冒烟"
           >
             API 测试
           </List.Item>
           <List.Item
-            onClick={() =>
-              Toast.show({ content: '调试页将在 Task 5 落地' })
-            }
+            onClick={() => navigate('/debug')}
             arrow
+            data-testid="menu-debug"
+            description="Shizuku / Shell / 包名"
           >
             调试工具
+          </List.Item>
+          <List.Item
+            onClick={() => navigate('/type-tool-test')}
+            arrow
+            data-testid="menu-type-tool"
+            description="AutoService.inputText 覆盖/追加"
+          >
+            Type 工具测试
           </List.Item>
         </List>
       </div>

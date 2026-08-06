@@ -277,3 +277,90 @@ export interface LingxiPermissionPlugin {
   ): Promise<PluginListenerHandle>;
   removeAllListeners?(): Promise<void>;
 }
+
+// —— Log §3.5 LingxiLog ——
+
+export type LogLevelName = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'VERBOSE';
+
+export interface LogEntryDto {
+  id: string;
+  /** Display time string (e.g. HH:mm:ss.SSS) from native Logger */
+  timestamp: string;
+  tag: string;
+  level: LogLevelName | string;
+  message: string;
+  throwable?: string | null;
+}
+
+export interface LogsEnvelope {
+  logs: LogEntryDto[];
+}
+
+export interface LogExportResult {
+  text: string;
+}
+
+export interface LingxiLogPlugin {
+  list(): Promise<LogsEnvelope>;
+  clear(): Promise<void>;
+  export(): Promise<LogExportResult>;
+  addListener(
+    eventName: 'logAppended',
+    listener: (data: LogsEnvelope) => void,
+  ): Promise<PluginListenerHandle>;
+  removeAllListeners?(): Promise<void>;
+}
+
+// —— Shell §3.6 LingxiShell (debug) ——
+
+export interface ShizukuStatusDto {
+  ready: boolean;
+  available: boolean;
+  /** ready | available | unavailable */
+  status: string;
+}
+
+export interface ShellCommandResult {
+  success: boolean;
+  output: string;
+  error?: string | null;
+  exitCode?: number | null;
+}
+
+export interface PackageInfoDto {
+  packageName: string;
+  label: string;
+  isSystem?: boolean;
+  hasLaunchIntent?: boolean;
+}
+
+export interface PackagesEnvelope {
+  packages: PackageInfoDto[];
+}
+
+export interface ShellTestResultDto {
+  name: string;
+  success: boolean;
+  message: string;
+  durationMs: number;
+}
+
+export interface ShellTestResultsEnvelope {
+  results: ShellTestResultDto[];
+}
+
+export interface LingxiShellPlugin {
+  getShizukuStatus(): Promise<ShizukuStatusDto>;
+  runCommand(options: { command: string }): Promise<ShellCommandResult>;
+  listPackages(options?: {
+    includeSystem?: boolean;
+    limit?: number;
+  }): Promise<PackagesEnvelope>;
+  launchApp(options: {
+    nameOrPackage?: string;
+    name?: string;
+  }): Promise<ShellCommandResult>;
+  /** AutoService.inputText — focus a field first (type tool test) */
+  inputText(options: { text: string }): Promise<ShellCommandResult>;
+  runPackageTests(): Promise<ShellTestResultsEnvelope>;
+}

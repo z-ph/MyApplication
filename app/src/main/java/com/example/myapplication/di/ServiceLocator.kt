@@ -7,7 +7,9 @@ import com.example.myapplication.api.ModelFetcher
 import com.example.myapplication.bridge.AgentFacade
 import com.example.myapplication.bridge.ApiConfigFacade
 import com.example.myapplication.bridge.ChatFacade
+import com.example.myapplication.bridge.LogFacade
 import com.example.myapplication.bridge.PermissionFacade
+import com.example.myapplication.bridge.ShellFacade
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.preferences.AppPreferences
 import com.example.myapplication.data.repository.ApiConfigRepository
@@ -48,6 +50,12 @@ object ServiceLocator {
 
     @Volatile
     private var permissionFacade: PermissionFacade? = null
+
+    @Volatile
+    private var logFacade: LogFacade? = null
+
+    @Volatile
+    private var shellFacade: ShellFacade? = null
 
     /**
      * Initialize the service locator with application context
@@ -180,6 +188,25 @@ object ServiceLocator {
         }
     }
 
+    /** Log façade singleton (in-memory Logger buffer). */
+    fun getLogFacade(): LogFacade {
+        logFacade?.let { return it }
+        synchronized(this) {
+            logFacade?.let { return it }
+            return LogFacade().also { logFacade = it }
+        }
+    }
+
+    /** Shell / package debug façade singleton. */
+    fun getShellFacade(context: Context): ShellFacade {
+        shellFacade?.let { return it }
+        synchronized(this) {
+            shellFacade?.let { return it }
+            val appCtx = context.applicationContext
+            return ShellFacade(appCtx).also { shellFacade = it }
+        }
+    }
+
     /**
      * Reset all instances (for testing purposes only)
      */
@@ -191,6 +218,8 @@ object ServiceLocator {
             agentFacade = null
             apiConfigFacade = null
             permissionFacade = null
+            logFacade = null
+            shellFacade = null
             database = null
             chatRepository = null
             apiConfigRepository = null

@@ -8,6 +8,9 @@ import { ProfilePage } from '../pages/ProfilePage';
 import { PermissionPage } from '../pages/PermissionPage';
 import { ApiConfigPage } from '../pages/ApiConfigPage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { ApiTestPage } from '../pages/ApiTestPage';
+import { DebugTestPage } from '../pages/DebugTestPage';
+import { TypeToolTestPage } from '../pages/TypeToolTestPage';
 import { LingxiPermission } from '../plugins/lingxi-permission';
 
 function LoadingGate() {
@@ -90,6 +93,9 @@ export function AppRouter() {
       <Route path="/permission" element={<PermissionPage />} />
       <Route path="/api-config" element={<ApiConfigPage />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/api-test" element={<ApiTestPage />} />
+      <Route path="/debug" element={<DebugTestPage />} />
+      <Route path="/type-tool-test" element={<TypeToolTestPage />} />
       <Route
         path="/tabs"
         element={

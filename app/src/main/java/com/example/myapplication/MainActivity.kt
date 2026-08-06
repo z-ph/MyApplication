@@ -5,12 +5,13 @@ import com.example.myapplication.plugins.LingxiAgentPlugin
 import com.example.myapplication.plugins.LingxiApiConfigPlugin
 import com.example.myapplication.plugins.LingxiAppPlugin
 import com.example.myapplication.plugins.LingxiChatPlugin
+import com.example.myapplication.plugins.LingxiLogPlugin
 import com.example.myapplication.plugins.LingxiPermissionPlugin
+import com.example.myapplication.plugins.LingxiShellPlugin
 import com.getcapacitor.BridgeActivity
 
 /**
- * Capacitor host activity. Compose UI shell removed in Phase 1;
- * H5 lives in assets/public. Compose screens remain in codebase until Phase 4 cleanup.
+ * Capacitor host activity. H5 SPA lives in assets/public (React + antd-mobile).
  * FloatingWindowService / AutoService / ScreenCaptureService stay registered in Manifest.
  *
  * MediaProjection for LingxiPermission.requestScreenCapture is handled via
@@ -25,6 +26,8 @@ class MainActivity : BridgeActivity() {
         registerPlugin(LingxiAgentPlugin::class.java)
         registerPlugin(LingxiPermissionPlugin::class.java)
         registerPlugin(LingxiApiConfigPlugin::class.java)
+        registerPlugin(LingxiLogPlugin::class.java)
+        registerPlugin(LingxiShellPlugin::class.java)
         super.onCreate(savedInstanceState)
     }
 }
