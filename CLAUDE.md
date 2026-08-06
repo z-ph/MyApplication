@@ -4,11 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Android phone assistant application that provides AI-powered device automation through accessibility services. Built with Kotlin, Jetpack Compose, and LangChain4j for LLM integration.
+Android phone assistant (灵犀) with AI-powered device automation via accessibility services.  
+**UI:** React + antd-mobile SPA in Capacitor WebView.  
+**Native:** Kotlin Agent / Accessibility / Shell / Room; bridge via Capacitor custom plugins.  
+**Not** Jetpack Compose for app screens (Compose removed Phase 4). Keep `FloatingWindowService`.
 
 ## Build Commands
 
 ```bash
+# H5 → assets/public
+cd frontend && npm run build:sync
+
 # Build debug APK
 ./gradlew assembleDebug
 
@@ -19,142 +25,118 @@ Android phone assistant application that provides AI-powered device automation t
 ./gradlew testDebugUnitTest
 
 # Run specific test class
-./gradlew testDebugUnitTest --tests "*.CircuitBreakerTest"
+./gradlew testDebugUnitTest --tests "*.ChatFacadeLogicTest"
 
 # Clean build
 ./gradlew clean
-
-# Check code style
-./gradlew ktlintCheck
 ```
 
 ## Development Scripts
 
+### Frontend (frontend/)
+```bash
+cd frontend && npm run dev          # browser with plugin mocks
+cd frontend && npm run build:sync   # production bundle → app assets
+```
+
 ### Python Scripts (scripts/)
-- `start_avd.py` - Launch Android emulator (`uv run python start_avd.py -l` to list AVDs)
-- `scripts/README.md` - Full documentation for build/install/emulator scripts
+- `start_avd.py` / emulator helpers — see `scripts/README.md`
 
 ### Appium UI Tests (tests/appium/)
 ```bash
-# Install dependencies
 uv pip install -r tests/appium/requirements.txt
-
-# Run tests
 uv run pytest tests/appium/
 ```
+Selectors: migrate to WebView + `data-testid` (see `docs/bridge-api.md` §4).
 
 ## Architecture
 
-### Core Layers
-
 ```
 app/src/main/java/com/example/myapplication/
-├── accessibility/     # AccessibilityService automation (AutoService, NodeParser, ActionExecutor)
-├── agent/             # LLM agent engine with LangChain4j integration
-├── api/               # API client layer (CircuitBreaker, ModelFetcher, ZhipuApiClient)
-├── config/            # App configuration and model provider settings
-├── data/              # Data layer (Room DB, DataStore, repositories, mappers)
-├── di/                # ServiceLocator for dependency injection
-├── network/           # HTTP client (Ktor-based)
-├── screen/            # Screen capture and image compression
-├── shell/             # Shell command execution (Shizuku integration)
-├── ui/                # Jetpack Compose UI screens and theme
-└── utils/             # Utilities (Logger, CrashHandler)
+├── accessibility/     # AutoService, NodeParser, ActionExecutor
+├── agent/             # LangChainAgentEngine, AndroidTools, ModelFactory
+├── api/               # CircuitBreaker, ModelFetcher
+├── bridge/            # Chat / Agent / ApiConfig / Permission / Log / Shell Facades
+├── config/            # AppConfig, ModelProvider
+├── data/              # Room, DataStore, repositories, mappers, DTOs
+├── di/                # ServiceLocator
+├── network/           # Ktor, LangChain HTTP SPI, NetworkMonitor
+├── plugins/           # Capacitor Plugin implementations
+├── screen/            # ScreenCapture, ScreenCaptureService
+├── shell/             # ShellExecutor, ShizukuHelper
+├── ui/overlay/        # FloatingWindowService only (classic View)
+└── utils/             # Logger, CrashHandler
+
+frontend/
+├── src/pages/         # Chat, Logs, Profile, Permission, ApiConfig, Settings, debug pages
+├── src/plugins/       # Typed Capacitor wrappers (no bare window.Capacitor)
+├── src/mocks/         # Web implementations for npm run dev
+└── src/types/bridge.ts
 ```
 
 ### Key Components
 
-**LangChain4j Agent** (`agent/langchain/`):
-- `ModelFactory.kt` - Multi-provider model creation (OpenAI, Anthropic, Ollama, Zhipu AI, LocalAI)
-- `LangChainAgentEngine.kt` - Core agent with AiServices, tool execution, chat memory
-- `AndroidTools.kt` - Tool annotations for accessibility actions
-- `RAGManager.kt` / `RAGAgent.kt` - Retrieval-augmented generation with local embeddings
+**Capacitor plugins** (`plugins/` + `frontend/src/plugins/`):  
+`LingxiChat`, `LingxiAgent`, `LingxiApiConfig`, `LingxiPermission`, `LingxiLog`, `LingxiShell`, `LingxiApp`.
 
-**Accessibility Automation** (`accessibility/`):
-- `AutoService.kt` - Main accessibility service with gesture support
-- `NodeParser.kt` - UI tree parsing with proper node recycling
-- `ActionExecutor.kt` - Click, scroll, swipe, input actions
+**Facades** (`bridge/`): UI-free entry points for plugins; own FloatingWindow stop-button wiring via `ChatFacade`.
 
-**Data Layer** (`data/`):
-- Room database with DAOs for API configs, sessions, messages
-- DataStore for preferences
-- Repository pattern with ServiceLocator DI
+**LangChain4j Agent** (`agent/`): multi-provider models, tools, chat memory.
 
-**Network** (`network/`):
-- Ktor HTTP client with logging
-- Circuit breaker pattern (`api/CircuitBreaker.kt`)
-- Exponential backoff retry logic
+**Accessibility** (`accessibility/`): gestures, node tree, input.
+
+**Data** (`data/`): Room sessions/messages/API configs; secrets stay native.
 
 ## Testing
 
-### Unit Tests Location
-Tests use JUnit, Truth, Mockito, and MockK. See `LANGCHAIN4J_INTEGRATION_SUMMARY.md` for test examples.
-
-### Test Tools
-- JUnit 4
-- Truth assertions
-- Mockito/MockK for mocking
-- Robolectric for Android framework
-- Turbine for Flow testing
-
-### Appium Integration Tests
-- `tests/appium/test_api_config.py` - API configuration UI tests
-- `tests/appium/test_chat_flow.py` - Chat flow tests
-- Page objects in `conftest.py`
+- JUnit 4, Truth, Mockito/MockK, Robolectric, Turbine under `app/src/test/`
+- Facade logic tests: `ChatFacadeLogicTest`, `ApiConfigFacadeLogicTest`
+- Appium: `tests/appium/`
 
 ## Key Documentation
 
-- `LANGCHAIN4J_MIGRATION.md` - LangChain4j integration guide and API reference
-- `LANGCHAIN4J_INTEGRATION_SUMMARY.md` - Feature summary with quick start examples
-- `docs/P0_ACCEPTANCE_CRITERIA.md` - P0 fix acceptance criteria and test status
-- `docs/appium-mcp-installation-guide.md` - Appium MCP setup
+- `docs/bridge-api.md` — frozen bridge DTO / plugin contract
+- `docs/compose-migration-inventory.md` — DELETE/KEEP inventory (Compose UI removed)
+- `docs/project-architecture.md` — architecture diagrams
+- `docs/superpowers/plans/2026-08-06-ionic-h5-migration.md` — migration plan
+- `docs/h5-dev-setup.md` — H5 / Capacitor dev notes
 
 ## Configuration
 
-### JVM Settings (gradle.properties)
-- JVM args: `-Xmx1024m -Dfile.encoding=UTF-8`
-- AndroidX enabled
-- Kotlin code style: official
-
-### Build Config (app/build.gradle.kts)
-- compileSdk/targetSdk: 36
-- minSdk: 26
-- Java/Kotlin target: 17
-- Compose enabled
+### Build (app/build.gradle.kts)
+- compileSdk/targetSdk: 36, minSdk: 26, Java/Kotlin 17
+- **No** Compose BOM / `buildFeatures.compose`
+- Capacitor via `:capacitor-android` project
 
 ### Key Dependencies (gradle/libs.versions.toml)
 - LangChain4j: 1.12.1
 - Kotlin: 2.1.10
 - AGP: 8.13.2
-- Compose BOM: 2025.08.00
 - Room: 2.7.0
 - Ktor: 3.1.1
 
+### Frontend
+- React 19, antd-mobile 5, Capacitor 7, Vite, React Router, Zustand
+
 ## Services & Permissions
 
-### Background Services
-- `AutoService` - Accessibility service for UI automation
-- `ScreenCaptureService` - Media projection for screenshots
-- `FloatingWindowService` - Overlay window
+- `AutoService` — accessibility automation
+- `ScreenCaptureService` — media projection
+- `FloatingWindowService` — task overlay (native View)
 
-### Required Permissions
-- FOREGROUND_SERVICE, POST_NOTIFICATIONS
-- SYSTEM_ALERT_WINDOW
-- INTERNET
-- QUERY_ALL_PACKAGES
-- BIND_ACCESSIBILITY_SERVICE
+Permissions: FOREGROUND_SERVICE, POST_NOTIFICATIONS, SYSTEM_ALERT_WINDOW, INTERNET, QUERY_ALL_PACKAGES, BIND_ACCESSIBILITY_SERVICE
 
 ## Common Tasks
 
-### Add new LLM provider
-1. Add provider case in `ModelFactory.createChatModel()`
-2. Add default config in `ModelFactory.getDefaultConfig()`
-3. Add recommended models in `ModelFactory.getRecommendedModels()`
+### Add LLM provider
+1. `ModelFactory.createChatModel()` case
+2. Default config / recommended models in ModelFactory
 
-### Add new accessibility tool
-1. Add `@Tool` annotated method in `AndroidTools.kt`
-2. Method will be auto-registered with LangChain4j AiServices
+### Add accessibility tool
+1. `@Tool` method on `AndroidTools.kt` (auto-registered with AiServices)
 
-### Debug network requests
-- Chucker library enabled in debug builds
-- Ktor client logging configured
+### Add bridge method
+1. Facade method → Capacitor `@PluginMethod` → TS type in `bridge.ts` + wrapper → update `docs/bridge-api.md`
+
+### Debug network
+- Chucker in debug builds; Ktor logging configured

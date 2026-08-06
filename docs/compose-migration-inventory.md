@@ -194,6 +194,15 @@ Facade **无** Compose / ViewModel 生命周期依赖；插件只做 JSON 编解
 - [x] **0.4** Appium 策略确认：WebView + `data-testid`（见 `bridge-api.md` §4，实现延后）
 - [x] 原生应用行为无变更（仅文档）
 
+## 7.1 Phase 4 / Task 5 完成勾选（2026-08-06）
+
+- [x] LingxiLog + LogsPage
+- [x] ApiTest / Debug / TypeTool H5 页 + LingxiShell
+- [x] 删除 `ui/chat/*`、`ui/screens/*`、`ui/theme/*`
+- [x] 移除 Compose Gradle 依赖与 `buildFeatures.compose`
+- [x] 保留 `ui/overlay/FloatingWindowService` + drawable
+- [x] 更新 CLAUDE.md / AGENTS.md / project-architecture.md
+
 ---
 
 ## 8. 删除顺序建议（Phase 4）
