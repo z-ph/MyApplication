@@ -75,8 +75,8 @@ class LingxiApiConfigPlugin : Plugin() {
         }
         pluginScope.launch {
             try {
-                val dto = facade.create(name, provider, apiKey, baseUrl, modelId)
-                call.resolve(PluginJson.configEnvelope(dto))
+                val (dto, reconfigured) = facade.create(name, provider, apiKey, baseUrl, modelId)
+                call.resolve(PluginJson.configEnvelope(dto, reconfigured))
             } catch (e: IllegalArgumentException) {
                 call.reject(e.message ?: "invalid create request")
             } catch (e: Exception) {
@@ -104,8 +104,8 @@ class LingxiApiConfigPlugin : Plugin() {
         }
         pluginScope.launch {
             try {
-                val dto = facade.update(id, name, provider, apiKey, baseUrl, modelId)
-                call.resolve(PluginJson.configEnvelope(dto))
+                val (dto, reconfigured) = facade.update(id, name, provider, apiKey, baseUrl, modelId)
+                call.resolve(PluginJson.configEnvelope(dto, reconfigured))
             } catch (e: IllegalArgumentException) {
                 call.reject(e.message ?: "invalid update request")
             } catch (e: Exception) {
@@ -123,8 +123,12 @@ class LingxiApiConfigPlugin : Plugin() {
         }
         pluginScope.launch {
             try {
-                facade.delete(id)
-                call.resolve()
+                val reconfigured = facade.delete(id)
+                if (reconfigured != null) {
+                    call.resolve(PluginJson.reconfiguredEnvelope(reconfigured))
+                } else {
+                    call.resolve()
+                }
             } catch (e: Exception) {
                 call.reject("delete failed: ${e.message}", e)
             }
@@ -140,8 +144,8 @@ class LingxiApiConfigPlugin : Plugin() {
         }
         pluginScope.launch {
             try {
-                facade.setActive(id)
-                call.resolve()
+                val reconfigured = facade.setActive(id)
+                call.resolve(PluginJson.reconfiguredEnvelope(reconfigured))
             } catch (e: Exception) {
                 call.reject("setActive failed: ${e.message}", e)
             }
@@ -153,13 +157,15 @@ class LingxiApiConfigPlugin : Plugin() {
         val provider = call.getString("provider")
         val apiKey = call.getString("apiKey") ?: ""
         val baseUrl = call.getString("baseUrl") ?: ""
+        // Edit form may leave apiKey blank; configId loads stored secret from Room.
+        val configId = call.getString("configId")
         if (provider.isNullOrBlank()) {
             call.reject("provider is required")
             return
         }
         pluginScope.launch {
             try {
-                val models = facade.fetchModels(provider, apiKey, baseUrl)
+                val models = facade.fetchModels(provider, apiKey, baseUrl, configId)
                 call.resolve(PluginJson.modelsEnvelope(models))
             } catch (e: Exception) {
                 call.reject("fetchModels failed: ${e.message}", e)
@@ -173,13 +179,15 @@ class LingxiApiConfigPlugin : Plugin() {
         val apiKey = call.getString("apiKey") ?: ""
         val baseUrl = call.getString("baseUrl") ?: ""
         val modelId = call.getString("modelId") ?: ""
+        // Edit form may leave apiKey blank; configId loads stored secret from Room.
+        val configId = call.getString("configId")
         if (provider.isNullOrBlank()) {
             call.reject("provider is required")
             return
         }
         pluginScope.launch {
             try {
-                val result = facade.testConnection(provider, apiKey, baseUrl, modelId)
+                val result = facade.testConnection(provider, apiKey, baseUrl, modelId, configId)
                 call.resolve(PluginJson.testConnection(result))
             } catch (e: Exception) {
                 call.reject("testConnection failed: ${e.message}", e)

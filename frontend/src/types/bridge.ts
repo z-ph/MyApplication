@@ -174,6 +174,12 @@ export interface ConfigsEnvelope {
 
 export interface ConfigEnvelope {
   config: ApiConfigDto;
+  /** Present when agent reconfigure was attempted after mutation; false = failed quietly */
+  reconfigured?: boolean | null;
+}
+
+export interface ReconfiguredResult {
+  reconfigured: boolean;
 }
 
 export interface CreateApiConfigOptions {
@@ -219,18 +225,22 @@ export interface LingxiApiConfigPlugin {
   list(): Promise<ConfigsEnvelope>;
   create(options: CreateApiConfigOptions): Promise<ConfigEnvelope>;
   update(options: UpdateApiConfigOptions): Promise<ConfigEnvelope>;
-  delete(options: { id: string }): Promise<void>;
-  setActive(options: { id: string }): Promise<void>;
+  delete(options: { id: string }): Promise<void | ReconfiguredResult>;
+  setActive(options: { id: string }): Promise<void | ReconfiguredResult>;
   fetchModels(options: {
     provider: string;
     apiKey?: string;
     baseUrl?: string;
+    /** When apiKey blank, native loads stored secret for this config id */
+    configId?: string;
   }): Promise<ModelsEnvelope>;
   testConnection(options: {
     provider: string;
     apiKey?: string;
     baseUrl?: string;
     modelId?: string;
+    /** When apiKey blank, native loads stored secret for this config id */
+    configId?: string;
   }): Promise<TestConnectionResult>;
   listProviders?(): Promise<ProvidersEnvelope>;
   addListener(

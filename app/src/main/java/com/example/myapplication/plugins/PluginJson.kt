@@ -105,8 +105,18 @@ object PluginJson {
         })
     }
 
-    fun configEnvelope(dto: ApiConfigDto): JSObject = JSObject().apply {
+    fun configEnvelope(
+        dto: ApiConfigDto,
+        reconfigured: Boolean? = null,
+    ): JSObject = JSObject().apply {
         put("config", apiConfig(dto))
+        if (reconfigured != null) {
+            put("reconfigured", reconfigured)
+        }
+    }
+
+    fun reconfiguredEnvelope(reconfigured: Boolean): JSObject = JSObject().apply {
+        put("reconfigured", reconfigured)
     }
 
     fun modelsEnvelope(models: List<String>): JSObject = JSObject().apply {

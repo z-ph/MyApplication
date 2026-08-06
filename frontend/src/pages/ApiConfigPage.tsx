@@ -166,25 +166,30 @@ export function ApiConfigPage() {
     }
     setSaving(true);
     try {
-      if (editing) {
-        await LingxiApiConfig.update({
-          id: editing.id,
-          name: form.name,
-          provider: form.provider,
-          apiKey: form.apiKey || undefined,
-          baseUrl: form.baseUrl,
-          modelId: form.modelId,
+      const result = editing
+        ? await LingxiApiConfig.update({
+            id: editing.id,
+            name: form.name,
+            provider: form.provider,
+            apiKey: form.apiKey || undefined,
+            baseUrl: form.baseUrl,
+            modelId: form.modelId,
+          })
+        : await LingxiApiConfig.create({
+            name: form.name || form.provider,
+            provider: form.provider,
+            apiKey: form.apiKey,
+            baseUrl: form.baseUrl,
+            modelId: form.modelId,
+          });
+      if (result.reconfigured === false) {
+        Toast.show({
+          icon: 'fail',
+          content: '配置已保存，但 Agent 重建失败',
         });
       } else {
-        await LingxiApiConfig.create({
-          name: form.name || form.provider,
-          provider: form.provider,
-          apiKey: form.apiKey,
-          baseUrl: form.baseUrl,
-          modelId: form.modelId,
-        });
+        Toast.show({ icon: 'success', content: '已保存' });
       }
-      Toast.show({ icon: 'success', content: '已保存' });
       setPopupOpen(false);
       await load();
     } catch (e) {
@@ -216,8 +221,15 @@ export function ApiConfigPage() {
 
   const onSetActive = async (c: ApiConfigDto) => {
     try {
-      await LingxiApiConfig.setActive({ id: c.id });
-      Toast.show({ icon: 'success', content: '已设为活跃' });
+      const r = await LingxiApiConfig.setActive({ id: c.id });
+      if (r && 'reconfigured' in r && r.reconfigured === false) {
+        Toast.show({
+          icon: 'fail',
+          content: '已设为活跃，但 Agent 重建失败',
+        });
+      } else {
+        Toast.show({ icon: 'success', content: '已设为活跃' });
+      }
       await load();
     } catch (e) {
       Toast.show({
@@ -239,6 +251,8 @@ export function ApiConfigPage() {
         apiKey: form.apiKey,
         baseUrl: form.baseUrl,
         modelId: form.modelId,
+        // Edit form leaves key blank → native loads Room secret via configId
+        configId: editing?.id,
       });
       Toast.show({
         icon: r.success ? 'success' : 'fail',
@@ -265,6 +279,7 @@ export function ApiConfigPage() {
         provider: form.provider,
         apiKey: form.apiKey,
         baseUrl: form.baseUrl,
+        configId: editing?.id,
       });
       setModels(r.models ?? []);
       if (r.models?.length) {

@@ -391,8 +391,8 @@ TypeScript 包装路径约定：`frontend/src/plugins/*.ts`。
 | `update` | 写字段 + `id`；`apiKey` 可空保留原密钥 | `{ config: ApiConfigDto }` | 更新；active 变更后 reconfigure |
 | `delete` | `{ id: string }` | `void` | 删除 |
 | `setActive` | `{ id: string }` | `void` | 设为活跃并 **reconfigure** Agent |
-| `fetchModels` | `{ provider, apiKey?, baseUrl? }` | `{ models: string[] }` | 拉取可用模型 id 列表 |
-| `testConnection` | `{ provider, apiKey?, baseUrl?, modelId? }` | `TestConnectionDto`（§2.5） | 测连（实现为 fetchModels 探测） |
+| `fetchModels` | `{ provider, apiKey?, baseUrl?, configId? }` | `{ models: string[] }` | 拉取可用模型 id 列表；`apiKey` 空且带 `configId` 时用 Room 存密钥 |
+| `testConnection` | `{ provider, apiKey?, baseUrl?, modelId?, configId? }` | `TestConnectionDto`（§2.5） | 测连（实现为 fetchModels 探测）；空 key + `configId` 回落存密钥 |
 | `listProviders` | — | `{ providers: { id, displayName, defaultBaseUrl, defaultModel }[] }` | 可选；H5 Selector 默认值 |
 
 | 事件 | 载荷（冻结） | 说明 |

@@ -9,6 +9,7 @@ import com.example.myapplication.data.local.entities.ApiConfigEntity
 import com.example.myapplication.data.repository.ApiConfigRepository
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -59,9 +60,10 @@ class ApiConfigFacadeLogicTest {
             repository.createConfig(any(), any(), any(), any(), any())
         } returns Result.success(created)
 
-        val dto = facade().create("Default", "OPENAI", "sk-real-key", "", "gpt-4o")
+        val (dto, reconfigured) = facade().create("Default", "OPENAI", "sk-real-key", "", "gpt-4o")
         assertThat(dto.provider).isEqualTo("OPENAI")
         assertThat(dto.apiKeyMasked).doesNotContain("real")
+        assertThat(reconfigured).isTrue()
         verify { agent.reconfigure() }
     }
 
@@ -72,14 +74,16 @@ class ApiConfigFacadeLogicTest {
             repository.createConfig(any(), any(), any(), any(), any())
         } returns Result.success(created)
 
-        facade().create("Other", "OPENAI", "sk-x", "", "gpt-4o")
+        val (_, reconfigured) = facade().create("Other", "OPENAI", "sk-x", "", "gpt-4o")
+        assertThat(reconfigured).isNull()
         verify(exactly = 0) { agent.reconfigure() }
     }
 
     @Test
     fun setActive_reconfigures() = runTest {
         coEvery { repository.setActiveConfig("c1") } returns Result.success(Unit)
-        facade().setActive("c1")
+        val ok = facade().setActive("c1")
+        assertThat(ok).isTrue()
         verify { agent.reconfigure() }
     }
 
@@ -101,7 +105,7 @@ class ApiConfigFacadeLogicTest {
             )
         } returns Result.success(Unit)
 
-        val dto = facade().update(
+        val (dto, reconfigured) = facade().update(
             id = "c1",
             name = "Renamed",
             provider = "OPENAI",
@@ -110,6 +114,7 @@ class ApiConfigFacadeLogicTest {
             modelId = existing.modelId,
         )
         assertThat(dto.name).isEqualTo("Renamed")
+        assertThat(reconfigured).isTrue()
         verify { agent.reconfigure() }
     }
 
@@ -139,6 +144,65 @@ class ApiConfigFacadeLogicTest {
         )
         val models = facade().fetchModels("ZHIPU", "k", "")
         assertThat(models).containsExactly("a", "b").inOrder()
+    }
+
+    @Test
+    fun testConnection_blankKey_usesStoredFromConfigId() = runTest {
+        coEvery { repository.getConfigById("c1") } returns entity(apiKey = "sk-stored")
+        coEvery {
+            modelFetcher.fetchModels(ModelProvider.OPENAI, "sk-stored", "https://api.openai.com/v1")
+        } returns ModelFetchResult(
+            isSuccess = true,
+            models = listOf(ModelInfo("gpt-4o", "gpt-4o")),
+        )
+        val r = facade().testConnection(
+            provider = "OPENAI",
+            apiKey = "",
+            baseUrl = "https://api.openai.com/v1",
+            modelId = "gpt-4o",
+            configId = "c1",
+        )
+        assertThat(r.success).isTrue()
+        coVerify {
+            modelFetcher.fetchModels(ModelProvider.OPENAI, "sk-stored", "https://api.openai.com/v1")
+        }
+    }
+
+    @Test
+    fun fetchModels_blankKey_usesStoredFromConfigId() = runTest {
+        coEvery { repository.getConfigById("c1") } returns entity(apiKey = "sk-stored")
+        coEvery {
+            modelFetcher.fetchModels(ModelProvider.OPENAI, "sk-stored", any())
+        } returns ModelFetchResult(
+            isSuccess = true,
+            models = listOf(ModelInfo("gpt-4o", "gpt-4o")),
+        )
+        val models = facade().fetchModels(
+            provider = "OPENAI",
+            apiKey = "",
+            baseUrl = "https://api.openai.com/v1",
+            configId = "c1",
+        )
+        assertThat(models).containsExactly("gpt-4o")
+    }
+
+    @Test
+    fun fetchModels_blankKey_withoutConfigId_fails() = runTest {
+        try {
+            facade().fetchModels("OPENAI", "", "https://x", configId = null)
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertThat(e.message).contains("apiKey is required")
+        }
+        coVerify(exactly = 0) { modelFetcher.fetchModels(any(), any(), any()) }
+    }
+
+    @Test
+    fun testConnection_blankKey_withoutConfigId_returnsFailure() = runTest {
+        val r = facade().testConnection("OPENAI", "", "https://x", "m", configId = null)
+        assertThat(r.success).isFalse()
+        assertThat(r.message).contains("apiKey")
+        coVerify(exactly = 0) { modelFetcher.fetchModels(any(), any(), any()) }
     }
 
     @Test

@@ -11,17 +11,20 @@ import {
 } from 'antd-mobile';
 import type { AgentStateDto, PermissionStatusDto } from '../types/bridge';
 import { LingxiAgent } from '../plugins/lingxi-agent';
+import { LingxiChat } from '../plugins/lingxi-chat';
 import { LingxiPermission } from '../plugins/lingxi-permission';
 
 /**
  * Settings mapped from Compose MainScreen: agent status, permission shortcuts,
- * API config entry, reconfigure / cancel.
+ * API config entry, reconfigure / test / cancel.
  */
 export function SettingsPage() {
   const navigate = useNavigate();
   const [agent, setAgent] = useState<AgentStateDto | null>(null);
   const [perm, setPerm] = useState<PermissionStatusDto | null>(null);
   const [reconfiguring, setReconfiguring] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [stopping, setStopping] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -81,6 +84,40 @@ export function SettingsPage() {
       });
     } finally {
       setReconfiguring(false);
+    }
+  };
+
+  const onTestAgent = async () => {
+    setTesting(true);
+    try {
+      await LingxiChat.sendMessage({
+        content: '分析一下当前屏幕，告诉我可以做什么',
+      });
+      Toast.show({ icon: 'success', content: '已发送测试任务' });
+      navigate('/tabs/chat');
+    } catch (e) {
+      Toast.show({
+        icon: 'fail',
+        content: e instanceof Error ? e.message : '测试失败',
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const onStopTask = async () => {
+    setStopping(true);
+    try {
+      await LingxiChat.cancelTask();
+      Toast.show({ content: '已停止任务' });
+      await refresh();
+    } catch (e) {
+      Toast.show({
+        icon: 'fail',
+        content: e instanceof Error ? e.message : '停止失败',
+      });
+    } finally {
+      setStopping(false);
     }
   };
 
@@ -201,6 +238,28 @@ export function SettingsPage() {
             data-testid="settings-reconfigure"
           >
             重建 Agent
+          </Button>
+          <Button
+            block
+            color="primary"
+            fill="outline"
+            loading={testing}
+            disabled={!isReady && !isRunning}
+            onClick={() => void onTestAgent()}
+            data-testid="settings-test-agent"
+          >
+            测试 Agent
+          </Button>
+          <Button
+            block
+            color="danger"
+            fill="outline"
+            loading={stopping}
+            disabled={!isRunning}
+            onClick={() => void onStopTask()}
+            data-testid="settings-stop-task"
+          >
+            停止任务
           </Button>
           <Button block fill="outline" onClick={() => void refresh()}>
             刷新状态

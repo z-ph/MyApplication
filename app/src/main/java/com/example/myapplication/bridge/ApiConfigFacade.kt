@@ -34,13 +34,17 @@ class ApiConfigFacade(
         repository.allConfigs.first().toApiConfigDtos()
     }
 
+    /**
+     * @return config DTO and whether agent reconfigure was attempted/succeeded
+     * (`reconfigured == null` means not attempted; `false` means attempted but failed).
+     */
     suspend fun create(
         name: String,
         provider: String,
         apiKey: String,
         baseUrl: String,
         modelId: String,
-    ): ApiConfigDto {
+    ): Pair<ApiConfigDto, Boolean?> {
         val modelProvider = providerFromBridge(provider)
         val result = repository.createConfig(
             name = name.ifBlank { modelProvider.displayName },
@@ -50,12 +54,13 @@ class ApiConfigFacade(
             modelId = modelId,
         )
         val entity = result.getOrElse { throw it }
-        if (entity.isActive) {
-            reconfigureAgentQuietly()
-        }
-        return entity.toDto()
+        val reconfigured = if (entity.isActive) reconfigureAgentQuietly() else null
+        return entity.toDto() to reconfigured
     }
 
+    /**
+     * @return config DTO and reconfigure outcome (`null` if not attempted).
+     */
     suspend fun update(
         id: String,
         name: String,
@@ -63,7 +68,7 @@ class ApiConfigFacade(
         apiKey: String?,
         baseUrl: String,
         modelId: String,
-    ): ApiConfigDto {
+    ): Pair<ApiConfigDto, Boolean?> {
         val existing = repository.getConfigById(id)
             ?: throw IllegalArgumentException("Config not found: $id")
         val modelProvider = providerFromBridge(provider)
@@ -80,49 +85,57 @@ class ApiConfigFacade(
         result.getOrElse { throw it }
         val updated = repository.getConfigById(id)
             ?: throw IllegalStateException("Config missing after update: $id")
-        if (existing.isActive || updated.isActive) {
-            reconfigureAgentQuietly()
-        }
-        return updated.toDto()
+        val reconfigured =
+            if (existing.isActive || updated.isActive) reconfigureAgentQuietly() else null
+        return updated.toDto() to reconfigured
     }
 
-    suspend fun delete(id: String) {
+    suspend fun delete(id: String): Boolean? {
         val existing = repository.getConfigById(id)
         val result = repository.deleteConfig(id)
         result.getOrElse { throw it }
-        if (existing?.isActive == true) {
-            reconfigureAgentQuietly()
-        }
+        return if (existing?.isActive == true) reconfigureAgentQuietly() else null
     }
 
-    suspend fun setActive(id: String) {
+    /** @return whether agent reconfigure succeeded after setActive. */
+    suspend fun setActive(id: String): Boolean {
         val result = repository.setActiveConfig(id)
         result.getOrElse { throw it }
-        reconfigureAgentQuietly()
+        return reconfigureAgentQuietly()
     }
 
+    /**
+     * @param configId when [apiKey] is blank, load secret from Room for this id (edit-form UX).
+     */
     suspend fun fetchModels(
         provider: String,
         apiKey: String,
         baseUrl: String,
+        configId: String? = null,
     ): List<String> {
         val modelProvider = providerFromBridge(provider)
-        val result = modelFetcher.fetchModels(modelProvider, apiKey, baseUrl)
+        val resolvedKey = resolveApiKey(apiKey, configId)
+        val result = modelFetcher.fetchModels(modelProvider, resolvedKey, baseUrl)
         if (!result.isSuccess) {
             throw IllegalStateException(result.error ?: "Failed to fetch models")
         }
         return result.models.map { it.id }
     }
 
+    /**
+     * @param configId when [apiKey] is blank, load secret from Room for this id (edit-form UX).
+     */
     suspend fun testConnection(
         provider: String,
         apiKey: String,
         baseUrl: String,
         modelId: String,
+        configId: String? = null,
     ): TestConnectionDto {
         return try {
             val modelProvider = providerFromBridge(provider)
-            val result = modelFetcher.fetchModels(modelProvider, apiKey, baseUrl)
+            val resolvedKey = resolveApiKey(apiKey, configId)
+            val result = modelFetcher.fetchModels(modelProvider, resolvedKey, baseUrl)
             if (result.isSuccess) {
                 TestConnectionDto(
                     success = true,
@@ -156,18 +169,38 @@ class ApiConfigFacade(
         }
     }
 
-    private fun reconfigureAgentQuietly() {
-        try {
+    /**
+     * Non-blank [apiKey] wins. Blank + [configId] → Room secret.
+     * Blank without usable stored key → [IllegalArgumentException].
+     */
+    suspend fun resolveApiKey(apiKey: String?, configId: String?): String {
+        if (!apiKey.isNullOrBlank()) return apiKey
+        if (!configId.isNullOrBlank()) {
+            val stored = repository.getConfigById(configId)?.apiKey
+            if (!stored.isNullOrBlank()) return stored
+            throw IllegalArgumentException("No stored apiKey for configId=$configId")
+        }
+        throw IllegalArgumentException("apiKey is required when configId is not provided")
+    }
+
+    /**
+     * @return true if reconfigure succeeded, false if failed (logged only).
+     */
+    private fun reconfigureAgentQuietly(): Boolean {
+        return try {
             val initResult = agent.reconfigure()
             if (initResult.isSuccess) {
                 logger.d("Agent reconfigured after API config change")
+                true
             } else {
                 logger.w(
                     "Agent reconfigure failed: ${initResult.exceptionOrNull()?.message}",
                 )
+                false
             }
         } catch (e: Exception) {
             logger.e("Agent reconfigure exception: ${e.message}", e)
+            false
         }
     }
 }
