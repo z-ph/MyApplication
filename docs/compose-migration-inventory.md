@@ -180,9 +180,8 @@ Facade **无** Compose / ViewModel 生命周期依赖；插件只做 JSON 编解
 ## 6. Appium（策略指针）
 
 - 迁移后：WebView 上下文 + `data-testid`（`chat-input`、`send-btn` 等）
-- 改写时机：Task 6 / Phase 5
+- **Task 6 / Phase 5 已改写** `tests/appium/conftest.py` + 用例
 - 详情：`docs/bridge-api.md` §4
-- 现状测试：`tests/appium/`（本阶段不改）
 
 ---
 

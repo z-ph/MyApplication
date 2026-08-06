@@ -50,6 +50,37 @@ If `frontend/node_modules` is missing (`npm ci` not run), Gradle configuration f
 | Debug APK | above sync, then `./gradlew :app:assembleDebug` |
 | Install on device | above sync, then `./gradlew :app:installDebug` |
 
+## WebView security (production)
+
+Capacitor hosts the SPA under `https://localhost` (`server.androidScheme`). After Bridge init, `MainActivity.hardenWebView()`:
+
+| Setting | Production intent |
+|---------|-------------------|
+| `allowFileAccess` | `false` — assets are not served via `file://` |
+| `allowFileAccessFromFileURLs` / `allowUniversalAccessFromFileURLs` | `false` |
+| `WebView.setWebContentsDebuggingEnabled` | **false** when app is not debuggable (release) |
+| Capacitor `android.webContentsDebuggingEnabled` | default follows `ApplicationInfo.FLAG_DEBUGGABLE` |
+
+Debug APKs may keep remote debugging for Chrome inspect. Do **not** ship release with debugging forced on.
+
+Also: never put API keys in H5 `localStorage`; list payloads use `apiKeyMasked` only (`docs/bridge-api.md` §5).
+
+## Frontend unit tests
+
+```bash
+cd frontend && npm test   # vitest: store + plugin mocks
+```
+
+## Appium (device required)
+
+```bash
+uv pip install -r tests/appium/requirements.txt
+# Start Appium 2, install APK, then:
+uv run pytest tests/appium/
+```
+
+Selectors: WebView + `data-testid` — see `docs/bridge-api.md` §4.
+
 ## Related
 
 - Frontend notes: [`frontend/README.md`](../frontend/README.md)

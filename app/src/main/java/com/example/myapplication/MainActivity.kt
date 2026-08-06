@@ -1,6 +1,8 @@
 package com.example.myapplication
 
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
+import android.webkit.WebView
 import com.example.myapplication.plugins.LingxiAgentPlugin
 import com.example.myapplication.plugins.LingxiApiConfigPlugin
 import com.example.myapplication.plugins.LingxiAppPlugin
@@ -29,5 +31,28 @@ class MainActivity : BridgeActivity() {
         registerPlugin(LingxiLogPlugin::class.java)
         registerPlugin(LingxiShellPlugin::class.java)
         super.onCreate(savedInstanceState)
+        hardenWebView()
+    }
+
+    /**
+     * Post-Bridge init hardening. Capacitor already serves via https://localhost
+     * (androidScheme); disable file://-style access and production remote debugging.
+     * See docs/bridge-api.md §5 and docs/h5-dev-setup.md.
+     */
+    private fun hardenWebView() {
+        val webView = bridge?.webView ?: return
+        val settings = webView.settings
+        // App assets are not loaded via file://; keep content:// if needed by plugins.
+        settings.allowFileAccess = false
+        @Suppress("DEPRECATION")
+        settings.allowFileAccessFromFileURLs = false
+        @Suppress("DEPRECATION")
+        settings.allowUniversalAccessFromFileURLs = false
+        // Capacitor defaults debugging to debuggable builds; force off for release.
+        val debuggable =
+            (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!debuggable) {
+            WebView.setWebContentsDebuggingEnabled(false)
+        }
     }
 }

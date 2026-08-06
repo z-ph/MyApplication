@@ -502,18 +502,42 @@ export interface LingxiChatPlugin {
 
 ## 4. Appium 选择器策略（Phase 5 / Task 6）
 
-**现状：** `tests/appium/` 基于原生 Compose/Android UIAutomator 选择器（如 `ChatScreenPage`）。
+**实现位置：** `tests/appium/`（`conftest.py` 页面对象 + `test_chat_flow.py` / `test_api_config.py`）。
 
-**迁移后策略（冻结意图，实现推迟到 Task 6 / Phase 5）：**
+**策略（已落地）：**
 
-1. **WebView 上下文：** 切换到 Capacitor WebView context 后再查找 DOM。
-2. **稳定选择器：** 关键控件使用 `data-testid`，至少包括：
-   - `chat-input` — 聊天输入框
-   - `send-btn` — 发送按钮
-3. 页面对象改写为 WebView + CSS/`data-testid` 定位；包名 `com.example.myapplication` 不变。
-4. 在 H5 落地聊天页时即预埋 `data-testid`，避免 Phase 5 大改 DOM。
+1. **WebView 上下文：** `PageObject.switch_to_webview()` 切换到 `WEBVIEW_*` 后再查 DOM。
+2. **稳定选择器：** 关键控件使用 `data-testid`（CSS `[data-testid="..."]`）。
+3. 包名 `com.example.myapplication` 不变；Appium 2 默认 URL `http://localhost:4723`。
+4. **运行前提：** Appium server + 已安装 debug APK 的模拟器/真机。无设备时 pytest 在 driver fixture 连接失败（属预期，非 CI 门禁）。
 
-**本 Phase：** 仅文档确认策略；不改测试代码、不改应用行为。
+### 4.1 关键 `data-testid` 清单
+
+| testid | 页面 / 组件 | 用途 |
+|--------|-------------|------|
+| `chat-input` | ChatInputBar | 聊天输入 |
+| `send-btn` | ChatInputBar | 发送 |
+| `cancel-btn` | ChatInputBar | 取消进行中任务 |
+| `session-menu` | ChatPage | 会话抽屉 |
+| `msg-list` | ChatPage | 消息列表 |
+| `msg-user` / `msg-ai` / … | MessageBubble | 消息气泡类型 |
+| `menu-api-config` | ProfilePage | 进入 API 配置 |
+| `api-config-add` | ApiConfigPage | 添加配置 |
+| `api-key-input` | ApiConfigPage | 密钥输入 |
+| `api-config-save` | ApiConfigPage | 保存 |
+| `settings-api-config` | SettingsPage | 设置入口 |
+| `perm-continue` | PermissionPage | 权限引导继续 |
+| `logs-list` / `logs-search` | LogsPage | 日志 |
+| `debug-*` / `type-*` / `api-test-*` | 调试页 | 调试与测连 |
+
+### 4.2 运行
+
+```bash
+uv pip install -r tests/appium/requirements.txt
+# 需 Appium server + device
+uv run pytest tests/appium/ -q
+# 可选: --appium-url http://localhost:4723 --device-name emulator-5554
+```
 
 ---
 
@@ -526,6 +550,10 @@ export interface LingxiChatPlugin {
 | 事件风暴 | Agent 高频状态原生侧 throttle（建议 100–200ms） |
 | 真源 | Room 为会话/消息/配置真源；H5 订阅 + 必要时 re-fetch |
 | 悬浮窗 | 不经 H5 路由；由原生 Service 与 Chat/Agent Facade 同步 |
+| WebView 文件访问 | `MainActivity.hardenWebView()`：`allowFileAccess=false`；关闭 file URL 跨域（`allowFileAccessFromFileURLs` / `allowUniversalAccessFromFileURLs`） |
+| Remote debugging | Capacitor 默认仅 debuggable 构建开启；**release** 在 `MainActivity` 强制 `WebView.setWebContentsDebuggingEnabled(false)` |
+| Mixed content | `capacitor.config` / assets：`android.allowMixedContent: false`（与 Capacitor 默认一致） |
+| 性能抽测（人工） | 冷启动到聊天可见；200 条消息滚动；任务 RUNNING 时取消按钮与列表是否卡顿 — 无设备 farm 时不进 CI |
 
 ---
 

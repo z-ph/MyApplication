@@ -437,13 +437,13 @@ export interface LingxiChatPlugin {
 
 ### Task 6: Phase 5 — 测试与发布加固（1–2 天）
 
-- [ ] **5.1** 插件契约的 JVM 单测（DTO 序列化、Facade 错误路径）
-- [ ] **5.2** 前端 vitest + Testing Library：store + 组件（mock 插件）
-- [ ] **5.3** 改写 Appium：WebView 上下文；关键控件 `data-testid`（如 `chat-input`、`send-btn`）
-- [ ] **5.4** 性能：冷启动、200 条消息滚动、任务进行中 UI 抽测
-- [ ] **5.5** 安全：WebView 文件访问策略；生产关闭 remote debugging
+- [x] **5.1** 插件契约的 JVM 单测（DTO 序列化、Facade 错误路径）— ShellFacade + 既有 Chat/ApiConfig
+- [x] **5.2** 前端 vitest：`useChatStore` mock 插件（无 Testing Library 组件树，YAGNI）
+- [x] **5.3** 改写 Appium：WebView 上下文 + `data-testid`（`tests/appium/`）
+- [x] **5.4** 性能：人工抽测清单写入 `bridge-api.md` §5（无设备 farm，不进 CI）
+- [x] **5.5** 安全：`MainActivity.hardenWebView` + 文档（file access / release remote debug）
 
-**验收：** `./gradlew testDebugUnitTest`；`uv run pytest tests/appium/` 主路径通过（或文档标明选择器迁移状态）。
+**验收：** `./gradlew testDebugUnitTest` 绿；Appium 选择器已迁移，真机需 Appium server（文档标明）。
 
 ---
 

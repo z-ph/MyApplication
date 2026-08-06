@@ -1,70 +1,80 @@
 """
-Pytest configuration and fixtures for Appium tests
+Pytest fixtures and page objects for Appium (H5 WebView + data-testid).
 
-This module provides fixtures for setting up and tearing down
-Appium driver connections for Android testing.
+Strategy (docs/bridge-api.md §4):
+1. Switch to Capacitor WEBVIEW context after launch.
+2. Locate critical controls via CSS [data-testid=...].
+3. Package com.example.myapplication unchanged.
+
+Requires: Appium server, device/emulator with app installed.
+Without those, pytest collection still works; tests fail at driver connect.
 """
+
+from __future__ import annotations
+
+import time
+from typing import Generator
 
 import pytest
 from appium import webdriver
 from appium.options.android import UiAutomator2Options
+from appium.webdriver.common.appiumby import AppiumBy
 from appium.webdriver.webdriver import WebDriver
-from typing import Generator
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 
-# Default capabilities for Android testing
 DEFAULT_CAPABILITIES = {
     "platformName": "Android",
-    "deviceName": "emulator-5554",  # Default emulator
+    "deviceName": "emulator-5554",
     "automationName": "UiAutomator2",
     "appPackage": "com.example.myapplication",
     "appActivity": ".MainActivity",
-    "noReset": True,  # Don't reset app state between tests
+    "noReset": True,
     "newCommandTimeout": 300,
     "autoGrantPermissions": True,
+    # Chromedriver for hybrid WebView (Capacitor)
+    "chromedriverAutodownload": True,
 }
 
-# Appium server URL
-APPIUM_SERVER_URL = "http://localhost:4723/wd/hub"
+# Appium 2 default base path is / (no /wd/hub). Override with --appium-url.
+APPIUM_SERVER_URL = "http://localhost:4723"
 
 
 def pytest_addoption(parser):
-    """Add custom command line options for pytest."""
     parser.addoption(
         "--device-name",
         action="store",
         default="emulator-5554",
-        help="Device name or UDID for testing"
+        help="Device name or UDID for testing",
     )
     parser.addoption(
         "--appium-url",
         action="store",
         default=APPIUM_SERVER_URL,
-        help="Appium server URL"
+        help="Appium server URL",
     )
     parser.addoption(
         "--app-path",
         action="store",
         default=None,
-        help="Path to APK file (optional, uses installed app if not provided)"
+        help="Path to APK file (optional)",
     )
 
 
 @pytest.fixture(scope="session")
 def appium_url(request) -> str:
-    """Get Appium server URL from command line or default."""
     return request.config.getoption("--appium-url")
 
 
 @pytest.fixture(scope="session")
 def device_name(request) -> str:
-    """Get device name from command line or default."""
     return request.config.getoption("--device-name")
 
 
 @pytest.fixture(scope="session")
 def app_path(request) -> str | None:
-    """Get APK path from command line or None."""
     return request.config.getoption("--app-path")
 
 
@@ -72,13 +82,8 @@ def app_path(request) -> str | None:
 def driver(
     appium_url: str,
     device_name: str,
-    app_path: str | None
+    app_path: str | None,
 ) -> Generator[WebDriver, None, None]:
-    """
-    Create and yield an Appium WebDriver instance.
-
-    The driver is created before each test and quit after.
-    """
     options = UiAutomator2Options()
     options.platform_name = "Android"
     options.device_name = device_name
@@ -88,174 +93,222 @@ def driver(
     options.no_reset = DEFAULT_CAPABILITIES["noReset"]
     options.new_command_timeout = DEFAULT_CAPABILITIES["newCommandTimeout"]
     options.auto_grant_permissions = DEFAULT_CAPABILITIES["autoGrantPermissions"]
+    # Best-effort; ignored if server lacks the capability.
+    try:
+        options.set_capability("chromedriverAutodownload", True)
+    except Exception:
+        pass
 
     if app_path:
         options.app = app_path
 
-    driver = webdriver.Remote(appium_url, options=options)
-
+    drv = webdriver.Remote(appium_url, options=options)
     try:
-        yield driver
+        yield drv
     finally:
-        driver.quit()
-
-
-@pytest.fixture(scope="function")
-def restart_app(driver: WebDriver) -> None:
-    """Restart the app before each test."""
-    driver.close_app()
-    driver.launch_app()
+        drv.quit()
 
 
 class PageObject:
-    """Base class for page objects."""
+    """Base page object: native NATIVE_APP helpers + WebView helpers."""
 
     def __init__(self, driver: WebDriver):
         self.driver = driver
 
-    def find_element_by_id(self, resource_id: str):
-        """Find element by resource ID."""
-        return self.driver.find_element("id", resource_id)
-
-    def find_element_by_text(self, text: str):
-        """Find element by text."""
-        return self.driver.find_element(
-            "-android uiautomator",
-            f'new UiSelector().text("{text}")'
+    def switch_to_webview(self, timeout: float = 20.0) -> str:
+        """Switch to first WEBVIEW_* context. Returns context name."""
+        deadline = time.time() + timeout
+        last_contexts: list[str] = []
+        while time.time() < deadline:
+            try:
+                contexts = list(self.driver.contexts)
+                last_contexts = contexts
+                for ctx in contexts:
+                    if "WEBVIEW" in ctx.upper():
+                        self.driver.switch_to.context(ctx)
+                        # Wait for document ready
+                        WebDriverWait(self.driver, 10).until(
+                            lambda d: d.execute_script("return document.readyState")
+                            == "complete"
+                        )
+                        return ctx
+            except Exception:
+                pass
+            time.sleep(0.4)
+        raise TimeoutError(
+            f"No WEBVIEW context within {timeout}s; last contexts={last_contexts}"
         )
 
-    def find_element_by_text_contains(self, text: str):
-        """Find element that contains text."""
-        return self.driver.find_element(
-            "-android uiautomator",
-            f'new UiSelector().textContains("{text}")'
-        )
+    def switch_to_native(self) -> None:
+        self.driver.switch_to.context("NATIVE_APP")
 
-    def find_element_by_desc(self, desc: str):
-        """Find element by content description."""
-        return self.driver.find_element(
-            "-android uiautomator",
-            f'new UiSelector().description("{desc}")'
-        )
+    def by_testid(self, testid: str):
+        return (By.CSS_SELECTOR, f'[data-testid="{testid}"]')
 
-    def click_element_by_id(self, resource_id: str):
-        """Click element by resource ID."""
-        self.find_element_by_id(resource_id).click()
+    def find_by_testid(self, testid: str, timeout: float = 10.0):
+        self.ensure_webview()
+        wait = WebDriverWait(self.driver, timeout)
+        return wait.until(EC.presence_of_element_located(self.by_testid(testid)))
 
-    def click_element_by_text(self, text: str):
-        """Click element by text."""
-        self.find_element_by_text(text).click()
+    def click_testid(self, testid: str, timeout: float = 10.0) -> None:
+        el = self.find_by_testid(testid, timeout=timeout)
+        wait = WebDriverWait(self.driver, timeout)
+        wait.until(EC.element_to_be_clickable(self.by_testid(testid)))
+        el.click()
 
-    def wait_for_element_by_text(self, text: str, timeout: int = 10):
-        """Wait for element with text to appear."""
-        from appium.webdriver.common.appiumby import AppiumBy
-        self.driver.implicitly_wait(timeout)
-        element = self.driver.find_element(AppiumBy.ANDROID_UIAUTOMATOR,
-            f'new UiSelector().text("{text}")')
-        self.driver.implicitly_wait(0)  # Reset implicit wait
-        return element
+    def ensure_webview(self) -> None:
+        ctx = getattr(self.driver, "current_context", None) or ""
+        if "WEBVIEW" not in str(ctx).upper():
+            self.switch_to_webview()
 
-    def input_text_by_id(self, resource_id: str, text: str):
-        """Input text into element by resource ID."""
-        element = self.find_element_by_id(resource_id)
-        element.clear()
-        element.send_keys(text)
-
-    def is_element_present_by_text(self, text: str) -> bool:
-        """Check if element with text is present."""
+    def is_testid_present(self, testid: str, timeout: float = 3.0) -> bool:
         try:
-            self.driver.implicitly_wait(2)
-            self.find_element_by_text(text)
+            self.find_by_testid(testid, timeout=timeout)
             return True
         except Exception:
             return False
-        finally:
-            self.driver.implicitly_wait(0)
+
+    def page_text_contains(self, text: str) -> bool:
+        self.ensure_webview()
+        try:
+            body = self.driver.find_element(By.TAG_NAME, "body").text
+            return text in body
+        except Exception:
+            return False
+
+    # --- legacy native helpers (still useful for system dialogs) ---
+
+    def find_element_by_text(self, text: str):
+        return self.driver.find_element(
+            AppiumBy.ANDROID_UIAUTOMATOR,
+            f'new UiSelector().text("{text}")',
+        )
+
+    def is_element_present_by_text(self, text: str) -> bool:
+        try:
+            self.ensure_webview()
+            return self.page_text_contains(text)
+        except Exception:
+            return False
 
 
 class ChatScreenPage(PageObject):
-    """Page object for Chat screen."""
+    """Chat tab: data-testid chat-input / send-btn / cancel-btn / msg-list."""
+
+    def prepare(self) -> None:
+        """Enter WebView and land on chat if possible."""
+        self.switch_to_webview()
+        # If permission gate still showing, continue if present
+        if self.is_testid_present("perm-continue", timeout=2.0):
+            try:
+                self.click_testid("perm-continue", timeout=2.0)
+            except Exception:
+                pass
+        # Ensure chat controls exist (may need tab bar)
+        if not self.is_testid_present("chat-input", timeout=5.0):
+            # Try open chat via body text / hash navigation
+            try:
+                self.driver.execute_script(
+                    "window.location.hash = '#/tabs/chat';"
+                    "window.location.pathname = '/tabs/chat';"
+                )
+            except Exception:
+                pass
+            # React Router BrowserRouter — try history
+            try:
+                self.driver.execute_script(
+                    "if (window.history) {"
+                    "  window.history.pushState({}, '', '/tabs/chat');"
+                    "  window.dispatchEvent(new PopStateEvent('popstate'));"
+                    "}"
+                )
+            except Exception:
+                pass
+            self.find_by_testid("chat-input", timeout=15.0)
 
     def get_message_input(self):
-        """Get the message input field."""
-        # Try to find by hint text
-        return self.driver.find_element(
-            "-android uiautomator",
-            'new UiSelector().textContains("输入消息")'
-        )
+        return self.find_by_testid("chat-input")
 
     def get_send_button(self):
-        """Get the send button."""
-        return self.driver.find_element(
-            "-android uiautomator",
-            'new UiSelector().description("Send")'
-        )
+        return self.find_by_testid("send-btn")
 
-    def get_menu_button(self):
-        """Get the menu button for session drawer."""
-        return self.driver.find_element(
-            "-android uiautomator",
-            'new UiSelector().description("Sessions")'
-        )
+    def type_message(self, message: str) -> None:
+        el = self.get_message_input()
+        el.click()
+        # antd-mobile TextArea may wrap textarea
+        try:
+            el.clear()
+        except Exception:
+            pass
+        el.send_keys(message)
+        # If wrapper, try nested textarea
+        try:
+            ta = el.find_element(By.TAG_NAME, "textarea")
+            ta.clear()
+            ta.send_keys(message)
+        except Exception:
+            try:
+                ta = self.driver.find_element(
+                    By.CSS_SELECTOR, '[data-testid="chat-input"] textarea'
+                )
+                ta.clear()
+                ta.send_keys(message)
+            except Exception:
+                pass
 
-    def type_message(self, message: str):
-        """Type a message in the input field."""
-        input_field = self.get_message_input()
-        input_field.click()
-        input_field.send_keys(message)
-
-    def send_message(self):
-        """Click the send button."""
-        self.get_send_button().click()
+    def send_message(self) -> None:
+        self.click_testid("send-btn")
 
     def is_message_displayed(self, message: str) -> bool:
-        """Check if a message is displayed in the chat."""
-        return self.is_element_present_by_text(message)
+        return self.page_text_contains(message)
 
-    def open_session_drawer(self):
-        """Open the session drawer."""
-        self.get_menu_button().click()
+    def open_session_drawer(self) -> None:
+        self.click_testid("session-menu")
 
 
 class ApiConfigScreenPage(PageObject):
-    """Page object for API Config screen."""
+    """API config via Profile menu or settings data-testid."""
 
-    def navigate_to_config(self):
-        """Navigate to API config screen from main screen."""
-        # This depends on your app's navigation structure
-        # Example: Click settings icon, then API config
-        settings_btn = self.driver.find_element(
-            "-android uiautomator",
-            'new UiSelector().description("Settings")'
-        )
-        settings_btn.click()
+    def prepare(self) -> None:
+        self.switch_to_webview()
+
+    def navigate_to_config(self) -> None:
+        self.prepare()
+        # Prefer profile menu item
+        if self.is_testid_present("menu-api-config", timeout=3.0):
+            self.click_testid("menu-api-config")
+            return
+        if self.is_testid_present("settings-api-config", timeout=2.0):
+            self.click_testid("settings-api-config")
+            return
+        # Hash / history navigation fallback
+        try:
+            self.driver.execute_script(
+                "if (window.history) {"
+                "  window.history.pushState({}, '', '/api-config');"
+                "  window.dispatchEvent(new PopStateEvent('popstate'));"
+                "}"
+            )
+        except Exception:
+            pass
+        self.find_by_testid("api-config-add", timeout=15.0)
 
     def get_add_config_button(self):
-        """Get the add config button."""
-        return self.driver.find_element(
-            "-android uiautomator",
-            'new UiSelector().description("添加配置")'
-        )
-
-    def get_config_by_name(self, name: str):
-        """Get a config card by name."""
-        return self.driver.find_element(
-            "-android uiautomator",
-            f'new UiSelector().textContains("{name}")'
-        )
+        return self.find_by_testid("api-config-add")
 
     def is_empty_state_displayed(self) -> bool:
-        """Check if empty state is displayed."""
-        return self.is_element_present_by_text("暂无 API 配置")
+        return self.page_text_contains("暂无") or self.page_text_contains("API")
 
 
 @pytest.fixture
 def chat_page(driver: WebDriver) -> ChatScreenPage:
-    """Get ChatScreen page object."""
-    return ChatScreenPage(driver)
+    page = ChatScreenPage(driver)
+    page.prepare()
+    return page
 
 
 @pytest.fixture
 def api_config_page(driver: WebDriver) -> ApiConfigScreenPage:
-    """Get ApiConfigScreen page object."""
-    return ApiConfigScreenPage(driver)
+    page = ApiConfigScreenPage(driver)
+    page.prepare()
+    return page

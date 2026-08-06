@@ -5,10 +5,15 @@ import com.example.myapplication.accessibility.AutoService
 import com.example.myapplication.shell.ShellExecutor
 import com.example.myapplication.shell.ShizukuHelper
 import com.example.myapplication.utils.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Debug shell façade for LingxiShell (docs/bridge-api.md §3.6).
  * Also exposes package-resolution helpers used by Debug / TypeTool pages.
+ *
+ * IO (process exec, package list) must never block the Main thread:
+ * plugin scope uses Main.immediate, so suspend paths use [Dispatchers.IO].
  */
 class ShellFacade(
     private val appContext: Context,
@@ -58,16 +63,18 @@ class ShellFacade(
         if (command.isBlank()) {
             return CommandResultDto(success = false, output = "", error = "command is required")
         }
-        return if (ShizukuHelper.isReady()) {
+        // ShizukuHelper.execute already switches to Dispatchers.IO.
+        if (ShizukuHelper.isReady()) {
             val result = ShizukuHelper.execute(command)
-            CommandResultDto(
+            return CommandResultDto(
                 success = result.isSuccess,
                 output = result.output,
                 error = result.error.takeIf { it.isNotBlank() },
                 exitCode = result.exitCode,
             )
-        } else {
-            // Fallback: Runtime.exec (limited)
+        }
+        // Fallback: Runtime.exec + waitFor must not run on Main (plugin scope).
+        return withContext(Dispatchers.IO) {
             try {
                 val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
                 val out = process.inputStream.bufferedReader().readText()
