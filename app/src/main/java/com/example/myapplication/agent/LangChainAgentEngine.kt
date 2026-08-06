@@ -139,7 +139,8 @@ class LangChainAgentEngine(private val context: Context) {
 
     fun cancel() {
         logger.d("取消任务")
-        _state.value = AgentState(state = AgentStateType.IDLE)
+        // Expose CANCELLED so H5 can distinguish idle vs user cancel (bridge-api §2.3).
+        _state.value = AgentState(state = AgentStateType.CANCELLED)
     }
 
     fun clearMemory() {

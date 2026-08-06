@@ -1,7 +1,11 @@
 package com.example.myapplication.di
 
 import android.content.Context
+import com.example.myapplication.MyApplication
+import com.example.myapplication.agent.LangChainAgentEngine
 import com.example.myapplication.api.ModelFetcher
+import com.example.myapplication.bridge.AgentFacade
+import com.example.myapplication.bridge.ChatFacade
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.preferences.AppPreferences
 import com.example.myapplication.data.repository.ApiConfigRepository
@@ -31,6 +35,12 @@ object ServiceLocator {
     @Volatile
     private var modelFetcher: ModelFetcher? = null
 
+    @Volatile
+    private var chatFacade: ChatFacade? = null
+
+    @Volatile
+    private var agentFacade: AgentFacade? = null
+
     /**
      * Initialize the service locator with application context
      * Should be called in Application.onCreate()
@@ -39,7 +49,7 @@ object ServiceLocator {
         if (database == null) {
             synchronized(this) {
                 if (database == null) {
-                    database = AppDatabase.getDatabase(context)
+                    database = AppDatabase.getDatabase(context.applicationContext)
                 }
             }
         }
@@ -88,12 +98,56 @@ object ServiceLocator {
         }
     }
 
+    private fun getAgentEngine(context: Context): LangChainAgentEngine {
+        return try {
+            MyApplication.getLangChainAgentEngine()
+        } catch (_: Exception) {
+            LangChainAgentEngine.getInstance(context.applicationContext)
+        }
+    }
+
+    /**
+     * Chat façade singleton for Capacitor plugins.
+     */
+    fun getChatFacade(context: Context): ChatFacade {
+        chatFacade?.let { return it }
+        synchronized(this) {
+            chatFacade?.let { return it }
+            init(context)
+            val appCtx = context.applicationContext
+            return ChatFacade(
+                appContext = appCtx,
+                repository = getChatRepository(),
+                agent = getAgentEngine(appCtx),
+            ).also { chatFacade = it }
+        }
+    }
+
+    /**
+     * Agent façade singleton (shares ChatFacade cancel flag for CANCELLED mapping).
+     */
+    fun getAgentFacade(context: Context): AgentFacade {
+        agentFacade?.let { return it }
+        synchronized(this) {
+            agentFacade?.let { return it }
+            val chat = getChatFacade(context)
+            val appCtx = context.applicationContext
+            return AgentFacade(
+                agent = getAgentEngine(appCtx),
+                chatFacade = chat,
+            ).also { agentFacade = it }
+        }
+    }
+
     /**
      * Reset all instances (for testing purposes only)
      */
     fun reset() {
         synchronized(this) {
             LangChainHttpClientRegistry.reset()
+            chatFacade?.dispose()
+            chatFacade = null
+            agentFacade = null
             database = null
             chatRepository = null
             apiConfigRepository = null

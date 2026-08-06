@@ -301,15 +301,37 @@ TypeScript 包装路径约定：`frontend/src/plugins/*.ts`。
 |------|--------------|------|
 | `sessionsChanged` | `{ sessions: ChatSessionDto[] }` | 与 `listSessions` 同形 |
 | `messagesChanged` | `{ sessionId: string, messages: ChatMessageDto[] }` | `messages` 必填，与 `listMessages` 同形 |
-| `taskProgress` | 进度摘要 / 与 Agent 态相关 payload | 任务进度推送（非 list 信封；实现时回写字段） |
+| `taskProgress` | 见下方字段 | 任务进度推送（非 list 信封） |
+
+**`taskProgress` 载荷（Phase 2 冻结）：**
+
+```json
+{
+  "sessionId": "uuid-or-null",
+  "state": "IDLE | READY | RUNNING | COMPLETED | ERROR | CANCELLED",
+  "step": "",
+  "action": "",
+  "thinking": "",
+  "result": null,
+  "error": null,
+  "message": null
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `sessionId` | string \| null | 当前会话；可能为空 |
+| `state` | string | 与 `AgentStateDto.state` 同枚举 |
+| `step` / `action` / `thinking` | string | 可空串（原生暂无细粒度字段时为 `""`） |
+| `result` / `error` / `message` | string \| null | 完成结果 / 错误 / 可选摘要 |
 
 ### 3.2 `LingxiAgent`
 
 | 方法 | 示意返回（冻结） | 说明 |
 |------|------------------|------|
 | `getState` | **裸** `AgentStateDto` | **禁止** `{ state: AgentStateDto }` 双层包装 |
-| `reconfigure` | 实现选定（建议 `void` 或 `{ ok: boolean }`） | 按活跃 API 配置重建 / 重载 Agent |
-| `isConfigured` | `{ configured: boolean }` 或实现回写 | 是否已具备可运行配置 |
+| `reconfigure` | `{ ok: boolean }` | 按活跃 API 配置重建 / 重载 Agent；失败 `reject` |
+| `isConfigured` | `{ configured: boolean }` | 是否已具备可运行配置 |
 
 | 事件 | 载荷（冻结） | 说明 |
 |------|--------------|------|
